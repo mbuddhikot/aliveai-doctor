@@ -27,9 +27,9 @@ export function DashboardLayout() {
   const displayName = user?.name || user?.email || 'Doctor'
 
   return (
-    <div className="min-h-screen bg-[#f4f4f8] text-[#161b26]">
-      <div className="flex min-h-screen overflow-hidden bg-[#f7f7fb]">
-        <div className="hidden md:flex">
+    <div className="h-screen overflow-hidden bg-[#f4f4f8] text-[#161b26]">
+      <div className="flex h-full min-h-0 overflow-hidden bg-[#f7f7fb]">
+        <div className="hidden h-full md:flex">
           <Sidebar />
         </div>
 
@@ -47,7 +47,7 @@ export function DashboardLayout() {
           </div>
         ) : null}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <DashboardTopbar
             title={title}
             name={displayName}
@@ -60,7 +60,7 @@ export function DashboardLayout() {
             }}
           />
 
-          <main className="min-w-0 flex-1 overflow-auto px-4 py-5 md:px-9 md:py-6">
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 md:px-9 md:py-6">
             <Outlet />
           </main>
         </div>

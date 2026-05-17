@@ -28,12 +28,12 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   return (
-    <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-[#dfe3ea] bg-white">
-      <div className="flex h-[150px] items-center justify-center">
+    <aside className="flex h-full w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#dfe3ea] bg-white">
+      <div className="flex h-[150px] shrink-0 items-center justify-center">
         <img src={logoImg} alt="AliveAI Doctor" className="h-[72px] w-auto object-contain" />
       </div>
 
-      <nav className="flex-1 space-y-[15px] px-7">
+      <nav className="min-h-0 flex-1 space-y-[15px] overflow-y-auto px-7">
         {navItems.map((item) => {
           const Icon = item.icon
           return (
@@ -57,7 +57,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="space-y-[22px] px-10 pb-[54px] text-base font-medium text-[#1f2933]">
+      <div className="shrink-0 space-y-[22px] px-10 pb-[54px] text-base font-medium text-[#1f2933]">
         <button type="button" className="flex min-h-8 w-full items-center gap-4 rounded-md hover:text-[#8a37ff]">
           <FiMessageSquare className="h-5 w-5 shrink-0 stroke-[1.9]" />
           <span>Feedback</span>

@@ -8,6 +8,8 @@ import { VerifyOtpPage } from '../../pages/auth/verify-otp/VerifyOtpPage'
 import { useAuth } from '../../features/auth/hooks/useAuth'
 import { DashboardLayout } from '../../pages/dashboard/layout/DashboardLayout'
 import { DashboardHomePage } from '../../pages/dashboard/routes/DashboardHomePage'
+import { CalendarPage } from '../../pages/dashboard/routes/CalendarPage'
+import { AvailabilityPage } from '../../pages/dashboard/routes/AvailabilityPage'
 import { ComingSoonPage } from '../../pages/dashboard/routes/ComingSoonPage'
 
 function IndexRedirect() {
@@ -28,14 +30,14 @@ export function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHomePage />} />
-          <Route path="calendar" element={<ComingSoonPage title="Calendar" />} />
+          <Route path="calendar" element={<CalendarPage />} />
           <Route
             path="patient-records"
             element={<ComingSoonPage title="Patient Records" />}
           />
           <Route
             path="availability"
-            element={<ComingSoonPage title="My Availability" />}
+            element={<AvailabilityPage />}
           />
           <Route path="profile" element={<ComingSoonPage title="Profile" />} />
         </Route>

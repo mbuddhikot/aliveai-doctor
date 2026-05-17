@@ -46,7 +46,7 @@ export function DashboardTopbar({
   onOpenSidebar: () => void
 }) {
   return (
-    <header className="flex min-h-[76px] items-center justify-between border-b border-[#dfe3ea] bg-white px-4 md:h-20 md:px-9">
+    <header className="flex min-h-[76px] shrink-0 items-center justify-between border-b border-[#dfe3ea] bg-white px-4 md:h-20 md:px-9">
       <div className="flex items-center gap-4 md:gap-7">
         <button
           type="button"

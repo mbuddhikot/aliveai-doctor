@@ -64,6 +64,8 @@ export type AuthContextValue = {
   resetPassword: (payload: ResetPasswordPayload) => Promise<void>
   signInWithGoogle: (token: string) => Promise<AuthUser>
   refreshAccount: () => Promise<AuthUser | null>
+  /** Updates is_verified in memory + storage (e.g. after doctor profile verification). */
+  syncUserVerified: (isVerified: boolean) => void
   signOut: () => void
   authLoading: boolean
   authInitializing: boolean

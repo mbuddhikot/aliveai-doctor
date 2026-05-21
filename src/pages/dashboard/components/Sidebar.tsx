@@ -1,16 +1,16 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import type { IconType } from 'react-icons'
 import {
   FiCalendar,
+  FiClipboard,
   FiFileText,
   FiGrid,
-  FiMessageSquare,
-  FiSettings,
+  FiLogOut,
   FiUser,
-  FiUsers,
 } from 'react-icons/fi'
 import clsx from 'clsx'
 import logoImg from '../../../assets/logo.png'
+import { useAuth } from '../../../features/auth/hooks/useAuth'
 
 type NavItem = {
   to: string
@@ -20,6 +20,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: FiGrid },
+  { to: '/dashboard/appointments', label: 'My Appointments', icon: FiClipboard },
   { to: '/dashboard/calendar', label: 'Calendar', icon: FiCalendar },
   { to: '/dashboard/patient-records', label: 'Patient Records', icon: FiFileText },
   { to: '/dashboard/availability', label: 'My Availability', icon: FiCalendar },
@@ -27,6 +28,14 @@ const navItems: NavItem[] = [
 ]
 
 export function Sidebar() {
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
+
+  const handleSignOut = () => {
+    signOut()
+    navigate('/sign-in', { replace: true })
+  }
+
   return (
     <aside className="flex h-full w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#dfe3ea] bg-white">
       <div className="flex h-[150px] shrink-0 items-center justify-center">
@@ -57,18 +66,14 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="shrink-0 space-y-[22px] px-10 pb-[54px] text-base font-medium text-[#1f2933]">
-        <button type="button" className="flex min-h-8 w-full items-center gap-4 rounded-md hover:text-[#8a37ff]">
-          <FiMessageSquare className="h-5 w-5 shrink-0 stroke-[1.9]" />
-          <span>Feedback</span>
-        </button>
-        <button type="button" className="flex min-h-8 w-full items-center gap-4 rounded-md hover:text-[#8a37ff]">
-          <FiUsers className="h-5 w-5 shrink-0 stroke-[1.9]" />
-          <span>Invite People</span>
-        </button>
-        <button type="button" className="flex min-h-8 w-full items-center gap-4 rounded-md hover:text-[#8a37ff]">
-          <FiSettings className="h-5 w-5 shrink-0 stroke-[1.9]" />
-          <span>Settings</span>
+      <div className="shrink-0 border-t border-[#eef1f5] px-7 py-6">
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="flex min-h-[40px] w-full items-center gap-4 rounded-md px-4 text-base font-medium text-[#1f2933] transition hover:bg-red-50 hover:text-red-600"
+        >
+          <FiLogOut className="h-5 w-5 shrink-0 stroke-[1.9]" />
+          <span>Log out</span>
         </button>
       </div>
     </aside>

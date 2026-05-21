@@ -107,6 +107,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return nextUser
   }, [])
 
+  const syncUserVerified = useCallback((isVerified: boolean) => {
+    setUser((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, is_verified: isVerified }
+      writeUserToStorage(next)
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     let alive = true
 
@@ -274,6 +283,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       resetPassword,
       signInWithGoogle,
       refreshAccount,
+      syncUserVerified,
       signOut,
       authLoading:
         isLoginPending ||
@@ -301,6 +311,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       resetPassword,
       signInWithGoogle,
       refreshAccount,
+      syncUserVerified,
       signOut,
       isLoginPending,
       isRegisterPending,

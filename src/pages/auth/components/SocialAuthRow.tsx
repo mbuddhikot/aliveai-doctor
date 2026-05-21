@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FcGoogle } from 'react-icons/fc'
 import { getOAuthPublicConfig } from '../../../features/auth/api/authApi'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
+import { resolvePostAuthPath } from '../../../features/auth/utils/postAuthPath'
 
 type SocialAuthMode = 'sign-in' | 'sign-up'
 
@@ -68,8 +69,8 @@ export function SocialAuthRow({
 
       try {
         setGoogleError(null)
-        await signInWithGoogle(credential)
-        navigate(redirectTo, { replace: true })
+        const account = await signInWithGoogle(credential)
+        navigate(resolvePostAuthPath(account, redirectTo), { replace: true })
       } catch (err: unknown) {
         const message =
           err instanceof Error ? err.message : 'Unable to sign in with Google'

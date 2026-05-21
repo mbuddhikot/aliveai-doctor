@@ -3,3 +3,7 @@
 body {
   @apply m-0 min-h-screen bg-white text-slate-900 antialiased;
 }
+
+.form-input {
+  @apply h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#8a37ff] focus:ring-4 focus:ring-violet-100;
+}

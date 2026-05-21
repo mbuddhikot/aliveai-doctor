@@ -8,7 +8,9 @@ import clsx from 'clsx'
 import { AuthShell } from '../components/AuthShell'
 import { SocialAuthRow } from '../components/SocialAuthRow'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
-import { CountrySelect } from '../../../components/common/CountrySelect'
+import { resolvePostAuthPath } from '../../../features/auth/utils/postAuthPath'
+import { PhoneNumberField } from '../../../components/common/PhoneNumberField'
+import { cleanLocalPhoneNumber } from '../../../lib/phone'
 import {
   DEFAULT_COUNTRY_ISO2,
   findCountryByIso2,
@@ -37,7 +39,7 @@ const FALLBACK_COUNTRY: Country = {
 
 export function SignUpPage() {
   const navigate = useNavigate()
-  const { isAuthenticated, signUp, authLoading, resetAuthError } = useAuth()
+  const { user, isAuthenticated, signUp, authLoading, resetAuthError } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
 
   const [country, setCountry] = useState<Country>(
@@ -61,8 +63,10 @@ export function SignUpPage() {
   })
 
   useEffect(() => {
-    if (isAuthenticated) navigate('/dashboard', { replace: true })
-  }, [isAuthenticated, navigate])
+    if (isAuthenticated) {
+      navigate(resolvePostAuthPath(user), { replace: true })
+    }
+  }, [isAuthenticated, navigate, user])
 
   useEffect(() => {
     return () => resetAuthError()
@@ -71,9 +75,10 @@ export function SignUpPage() {
   const onSubmit = async (values: SignUpFormValues) => {
     try {
       // strip the user's leading dial code if they typed it
-      const cleanedMobile = values.mobile_number
-        .replace(/\s+/g, '')
-        .replace(new RegExp(`^\\${country.dial_code}`), '')
+      const cleanedMobile = cleanLocalPhoneNumber(
+        values.mobile_number,
+        country.dial_code,
+      )
 
       const result = await signUp({
         email: values.email,
@@ -180,32 +185,12 @@ export function SignUpPage() {
           )}
         </div>
 
-        <div className="space-y-1">
-          <label className="text-sm text-black">Phone Number</label>
-          <div
-            className={clsx(
-              'flex h-[50px] w-full items-center rounded-[10px] border px-4',
-              errors.mobile_number
-                ? 'border-red-300 focus-within:border-red-400'
-                : 'border-[#b6b6b8] focus-within:border-[#8a37ff]',
-            )}
-          >
-            <CountrySelect value={country} onChange={setCountry} />
-            <span className="mx-3 h-7 w-px bg-[#b6b6b8]" />
-            <input
-              type="tel"
-              autoComplete="tel"
-              placeholder="1234567890"
-              className="h-full min-w-0 flex-1 bg-transparent text-base text-black outline-none placeholder:text-black"
-              {...register('mobile_number')}
-            />
-          </div>
-          {errors.mobile_number && (
-            <p className="text-xs text-red-600">
-              {errors.mobile_number.message}
-            </p>
-          )}
-        </div>
+        <PhoneNumberField
+          country={country}
+          onCountryChange={setCountry}
+          error={errors.mobile_number?.message}
+          inputProps={register('mobile_number')}
+        />
 
         <div className="space-y-1">
           <label className="text-sm text-black">Your password</label>

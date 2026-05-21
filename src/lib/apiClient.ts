@@ -20,6 +20,16 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  // Default Content-Type is application/json; FormData must set its own boundary.
+  if (config.data instanceof FormData && config.headers) {
+    if (typeof config.headers.delete === 'function') {
+      config.headers.delete('Content-Type')
+    } else {
+      delete config.headers['Content-Type']
+    }
+  }
+
   return config
 })
 
@@ -39,6 +49,9 @@ export function extractApiErrorMessage(err: unknown, fallback: string): string {
         return body.message
       }
       if (typeof body.detail === 'string' && body.detail.trim()) {
+        if (body.detail.includes('multipart/form-data')) {
+          return 'Document upload failed. Please try again.'
+        }
         return body.detail
       }
       if (Array.isArray(body.detail) && body.detail.length > 0) {

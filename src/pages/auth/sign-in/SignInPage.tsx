@@ -7,6 +7,7 @@ import { FiEye, FiEyeOff } from 'react-icons/fi'
 import { AuthShell } from '../components/AuthShell'
 import { SocialAuthRow } from '../components/SocialAuthRow'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
+import { resolvePostAuthPath } from '../../../features/auth/utils/postAuthPath'
 import clsx from 'clsx'
 import type { SignInPayload } from '../../../features/auth/types'
 import logoImg from '../../../assets/logo.png'
@@ -24,6 +25,7 @@ export function SignInPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const {
+    user,
     isAuthenticated,
     signIn,
     signInDemo,
@@ -59,8 +61,10 @@ export function SignInPage() {
   })
 
   useEffect(() => {
-    if (isAuthenticated) navigate('/dashboard', { replace: true })
-  }, [isAuthenticated, navigate])
+    if (isAuthenticated) {
+      navigate(resolvePostAuthPath(user, from), { replace: true })
+    }
+  }, [from, isAuthenticated, navigate, user])
 
   useEffect(() => {
     return () => resetAuthError()
@@ -68,8 +72,8 @@ export function SignInPage() {
 
   const onSubmit = async (values: SignInFormValues) => {
     try {
-      await signIn(values as SignInPayload)
-      navigate(from, { replace: true })
+      const account = await signIn(values as SignInPayload)
+      navigate(resolvePostAuthPath(account, from), { replace: true })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to sign in'
       setError('root', { message })

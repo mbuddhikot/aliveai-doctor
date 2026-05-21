@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
 import { Sidebar } from '../components/Sidebar'
 import { DashboardTopbar } from './DashboardTopbar'
 
 function titleFromPath(pathname: string): string {
+  if (pathname.startsWith('/dashboard/appointments')) return 'My Appointments'
   if (pathname.startsWith('/dashboard/calendar')) return 'Calendar'
   if (pathname.startsWith('/dashboard/patient-records')) return 'Patient Records'
   if (pathname.startsWith('/dashboard/availability')) return 'My Availability'
@@ -13,9 +14,8 @@ function titleFromPath(pathname: string): string {
 }
 
 export function DashboardLayout() {
-  const navigate = useNavigate()
   const location = useLocation()
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -53,14 +53,9 @@ export function DashboardLayout() {
             name={displayName}
             avatarUrl={user?.avatar_url}
             onOpenSidebar={() => setSidebarOpen(true)}
-            onBack={() => navigate(-1)}
-            onSignOut={() => {
-              signOut()
-              navigate('/sign-in', { replace: true })
-            }}
           />
 
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 md:px-9 md:py-6">
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 md:px-9 md:py-4">
             <Outlet />
           </main>
         </div>

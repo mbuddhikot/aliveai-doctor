@@ -6,15 +6,23 @@ import { ForgotPasswordPage } from '../../pages/auth/forgot-password/ForgotPassw
 import { ResetPasswordPage } from '../../pages/auth/reset-password/ResetPasswordPage'
 import { VerifyOtpPage } from '../../pages/auth/verify-otp/VerifyOtpPage'
 import { useAuth } from '../../features/auth/hooks/useAuth'
+import { resolvePostAuthPath } from '../../features/auth/utils/postAuthPath'
 import { DashboardLayout } from '../../pages/dashboard/layout/DashboardLayout'
 import { DashboardHomePage } from '../../pages/dashboard/routes/DashboardHomePage'
 import { CalendarPage } from '../../pages/dashboard/routes/CalendarPage'
+import { MyAppointmentsPage } from '../../pages/dashboard/routes/MyAppointmentsPage'
 import { AvailabilityPage } from '../../pages/dashboard/routes/AvailabilityPage'
 import { ComingSoonPage } from '../../pages/dashboard/routes/ComingSoonPage'
+import { DoctorOnboardingPage } from '../../pages/doctor-onboarding/DoctorOnboardingPage'
 
 function IndexRedirect() {
-  const { isAuthenticated } = useAuth()
-  return <Navigate to={isAuthenticated ? '/dashboard' : '/sign-in'} replace />
+  const { isAuthenticated, user } = useAuth()
+  return (
+    <Navigate
+      to={isAuthenticated ? resolvePostAuthPath(user) : '/sign-in'}
+      replace
+    />
+  )
 }
 
 export function AppRouter() {
@@ -28,8 +36,10 @@ export function AppRouter() {
       <Route path="/verify-otp" element={<VerifyOtpPage />} />
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/doctor-onboarding" element={<DoctorOnboardingPage />} />
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHomePage />} />
+          <Route path="appointments" element={<MyAppointmentsPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route
             path="patient-records"

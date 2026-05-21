@@ -14,6 +14,7 @@ import {
 } from 'react-icons/fi'
 import {
   approveDoctorAppointment,
+  DOCTOR_APPOINTMENTS_QUERY_KEY,
   listDoctorAppointments,
   rejectDoctorAppointment,
   rescheduleDoctorAppointment,
@@ -98,8 +99,15 @@ function AppointmentListItem({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold text-black">
-            {appointment.issue?.trim() || 'Consultation'}
+            {appointment.patient_name?.trim() ||
+              appointment.issue?.trim() ||
+              'Consultation'}
           </p>
+          {appointment.patient_name && appointment.issue && (
+            <p className="mt-0.5 truncate text-xs text-[#64748b]">
+              {appointment.issue.trim()}
+            </p>
+          )}
           <p className="mt-1 flex items-center gap-1.5 text-sm text-[#64748b]">
             <FiCalendar className="h-4 w-4 shrink-0" />
             {formatAppointmentDateTime(appointment.starts_at)}
@@ -150,8 +158,13 @@ function AppointmentDetailPanel({
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[12px] border border-[#dfe3ea] bg-white shadow-[0_8px_24px_rgba(31,41,55,0.04)]">
       <div className="shrink-0 border-b border-[#edf0f4] px-4 py-3">
         <p className="text-base font-bold text-black">
-          {appointment.issue?.trim() || 'Consultation'}
+          {appointment.patient_name?.trim() ||
+            appointment.issue?.trim() ||
+            'Consultation'}
         </p>
+        {appointment.patient_email && (
+          <p className="mt-1 text-sm text-[#64748b]">{appointment.patient_email}</p>
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <WorkflowBadge workflowStatus={appointment.workflow_status} />
           <StatusBadge status={appointment.status} />
@@ -292,7 +305,7 @@ export function MyAppointmentsPage() {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const appointmentsQuery = useQuery({
-    queryKey: ['doctor-appointments', doctorId],
+    queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
     queryFn: () => listDoctorAppointments({ doctorId: doctorId! }),
     enabled: Boolean(doctorId),
   })
@@ -317,7 +330,9 @@ export function MyAppointmentsPage() {
   }, [appointmentsQuery.data?.data])
 
   const invalidateAppointments = () => {
-    void queryClient.invalidateQueries({ queryKey: ['doctor-appointments'] })
+    void queryClient.invalidateQueries({
+      queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY],
+    })
   }
 
   const approveMutation = useMutation({

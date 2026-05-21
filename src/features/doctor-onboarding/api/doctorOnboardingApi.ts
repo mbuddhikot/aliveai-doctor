@@ -1,12 +1,42 @@
 import axios from 'axios'
 import { apiClient, extractApiErrorMessage } from '../../../lib/apiClient'
 import type {
+  DoctorDocument,
   DoctorDocumentType,
   DoctorDocumentUploadResponse,
   DoctorProfile,
   DoctorProfilePayload,
   DoctorVerificationSummary,
 } from '../types'
+
+function normalizeDoctorProfile(data: DoctorProfile): DoctorProfile {
+  return {
+    ...data,
+    full_name: data.full_name?.trim() ?? '',
+    specialty: data.specialty?.trim() ?? null,
+    qualifications: data.qualifications ?? [],
+    registration_number: data.registration_number?.trim() ?? null,
+    phone: data.phone?.trim() ?? null,
+    bio: data.bio ?? null,
+    years_experience: data.years_experience ?? null,
+    fee_amount: data.fee_amount ?? null,
+    fee_currency: data.fee_currency ?? null,
+    session_minutes: data.session_minutes ?? 30,
+    verification_status: data.verification_status || 'none',
+    is_active: Boolean(data.is_active),
+  }
+}
+
+function normalizeDocument(doc: DoctorDocument): DoctorDocument {
+  return {
+    id: doc.id,
+    doc_type: doc.doc_type,
+    file_name: doc.file_name ?? null,
+    content_type: doc.content_type ?? null,
+    gcs_url: doc.gcs_url,
+    uploaded_at: doc.uploaded_at,
+  }
+}
 
 async function requestProfile(
   method: 'post' | 'put',
@@ -16,10 +46,26 @@ async function requestProfile(
     '/v1/doctor/profile',
     payload,
   )
-  return data
+  return normalizeDoctorProfile(data)
 }
 
-/** Create or update the doctor profile (POST first, PUT on conflict). */
+/** GET /v1/doctor/profile — returns null when no profile exists yet (404). */
+export async function getDoctorProfile(): Promise<DoctorProfile | null> {
+  try {
+    const { data } = await apiClient.get<DoctorProfile>('/v1/doctor/profile')
+    return normalizeDoctorProfile(data)
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      return null
+    }
+    throw new Error(
+      extractApiErrorMessage(err, 'Unable to load doctor profile'),
+      { cause: err },
+    )
+  }
+}
+
+/** POST /v1/doctor/profile (create) or PUT /v1/doctor/profile (update). */
 export async function saveDoctorProfile(
   payload: DoctorProfilePayload,
   profileAlreadyExists = false,
@@ -41,6 +87,7 @@ export async function saveDoctorProfile(
   }
 }
 
+/** POST /v1/doctor/documents — multipart upload (file + doc_type). */
 export async function uploadDoctorDocument(payload: {
   file: File
   doc_type: DoctorDocumentType
@@ -66,6 +113,7 @@ export async function uploadDoctorDocument(payload: {
   }
 }
 
+/** GET /v1/doctor/verification-status */
 export async function getDoctorVerificationStatus(): Promise<DoctorVerificationSummary> {
   try {
     const { data } = await apiClient.get<DoctorVerificationSummary>(
@@ -74,11 +122,11 @@ export async function getDoctorVerificationStatus(): Promise<DoctorVerificationS
     return {
       verification_status: data.verification_status || 'none',
       profile_completed: Boolean(data.profile_completed),
-      documents_uploaded: data.documents_uploaded || 0,
-      documents: data.documents || [],
-      doctor_id: data.doctor_id,
-      rejection_reason: data.rejection_reason,
-      verified_at: data.verified_at,
+      documents_uploaded: data.documents_uploaded ?? 0,
+      documents: (data.documents ?? []).map(normalizeDocument),
+      doctor_id: data.doctor_id ?? null,
+      rejection_reason: data.rejection_reason ?? null,
+      verified_at: data.verified_at ?? null,
     }
   } catch (err) {
     throw new Error(

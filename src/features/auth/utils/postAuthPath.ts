@@ -5,7 +5,7 @@ export function resolvePostAuthPath(
   user: AuthUser | null | undefined,
   fallback = '/dashboard',
 ): string {
-  if (user?.role === 'doctor' && user.is_verified === false) {
+  if (user?.role === 'doctor' && user.is_verified !== true) {
     return '/doctor-onboarding'
   }
   return fallback

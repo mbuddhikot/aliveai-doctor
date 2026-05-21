@@ -25,7 +25,9 @@ type DocumentsStepProps = {
     items: { file: File; doc_type: DoctorDocumentType }[],
     onProgress?: (current: number, total: number, docType: DoctorDocumentType) => void,
   ) => Promise<void>
-  onContinue: () => void
+  onContinue?: () => void
+  /** Hide onboarding-only “continue to review” when managing from dashboard. */
+  variant?: 'onboarding' | 'dashboard'
 }
 
 type PendingFiles = Partial<Record<DoctorDocumentType, File>>
@@ -65,7 +67,9 @@ export function DocumentsStep({
   uploadError,
   onUploadBatch,
   onContinue,
+  variant = 'onboarding',
 }: DocumentsStepProps) {
+  const isDashboard = variant === 'dashboard'
   const [pendingFiles, setPendingFiles] = useState<PendingFiles>({})
   const [localError, setLocalError] = useState<string | null>(null)
   const [batchStatus, setBatchStatus] = useState<string | null>(null)
@@ -92,7 +96,7 @@ export function DocumentsStep({
   ][]
   const pendingCount = pendingEntries.length
   const hasLicense = uploadedTypes.has(REQUIRED_DOC_TYPE)
-  const canContinue = documents.length > 0
+  const canContinue = hasLicense
 
   const recommendedDone = RECOMMENDED_DOC_TYPES.filter((t) =>
     uploadedTypes.has(t),
@@ -162,14 +166,16 @@ export function DocumentsStep({
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-[-0.5px] text-black">
-          Verification documents
+          {isDashboard ? 'Verification documents' : 'Verification documents'}
         </h2>
         <p className="mt-2 text-sm leading-6 text-[#878787]">
-          Add a file for each document type below. You can select several files
-          first, then upload them together in one click.
+          {isDashboard
+            ? 'Update or add credentials. Uploads are sent to our verification team.'
+            : 'Add a file for each document type below. You can select several files first, then upload them together in one click.'}
         </p>
       </div>
 
+      {!isDashboard && (
       <div className="rounded-[12px] border border-[#e6e8ee] bg-[#fafafa] px-4 py-3">
         <p className="text-sm font-semibold text-black">How this works</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-[#64748b]">
@@ -191,6 +197,7 @@ export function DocumentsStep({
             : ''}
         </p>
       </div>
+      )}
 
       <div className="space-y-3">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#64748b]">
@@ -276,19 +283,22 @@ export function DocumentsStep({
             Clear selection
           </button>
         )}
-        <button
-          type="button"
-          disabled={!canContinue || isUploading}
-          onClick={onContinue}
-          className="h-12 rounded-[10px] border border-[#8a37ff] bg-white px-6 text-sm font-bold text-[#8a37ff] transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Continue to review
-        </button>
+        {!isDashboard && onContinue && (
+          <button
+            type="button"
+            disabled={!canContinue || isUploading}
+            onClick={onContinue}
+            className="h-12 rounded-[10px] border border-[#8a37ff] bg-white px-6 text-sm font-bold text-[#8a37ff] transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Continue to review
+          </button>
+        )}
       </div>
 
-      {!hasLicense && canContinue && (
+      {!isDashboard && !hasLicense && canContinue && (
         <p className="text-sm text-amber-700">
-          Upload your medical license for the fastest verification.
+          Upload your medical license to continue. Other documents are optional but
+          help speed up verification.
         </p>
       )}
 

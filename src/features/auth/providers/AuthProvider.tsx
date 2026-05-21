@@ -237,18 +237,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [googleLoginMutateAsync],
   )
 
-  const signInDemo = useCallback((): AuthUser => {
-    // TODO: remove this once real demo credentials exist on the backend.
-    const demoUser: AuthUser = {
-      id: 'demo-user',
-      email: 'demo.doctor@aliveai.ai',
-      name: 'Demo Doctor',
-    }
-    setUser(demoUser)
-    writeUserToStorage(demoUser)
-    return demoUser
-  }, [])
-
   const signOut = useCallback(() => {
     setUser(null)
     clearUserStorage()
@@ -276,7 +264,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       user,
       isAuthenticated: Boolean(user),
       signIn,
-      signInDemo,
       signUp,
       verifyOtp,
       forgotPassword,
@@ -304,7 +291,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [
       user,
       signIn,
-      signInDemo,
       signUp,
       verifyOtp,
       forgotPassword,

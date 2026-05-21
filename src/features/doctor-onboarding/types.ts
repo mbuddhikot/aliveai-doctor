@@ -31,7 +31,8 @@ export type DoctorProfilePayload = {
   session_minutes?: number | null
 }
 
-export type DoctorProfile = DoctorProfilePayload & {
+export type DoctorProfile = Omit<DoctorProfilePayload, 'specialty'> & {
+  specialty: string | null
   id: string
   user_id: string
   verification_status: DoctorVerificationStatus

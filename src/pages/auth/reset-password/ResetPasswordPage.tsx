@@ -7,16 +7,18 @@ import { FiEye, FiEyeOff } from 'react-icons/fi'
 import clsx from 'clsx'
 import { AuthShell } from '../components/AuthShell'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
+import {
+  emailField,
+  strongPasswordField,
+} from '../../../features/auth/lib/authSchemas'
 import logoImg from '../../../assets/logo.png'
 
 const schema = z
   .object({
-    email: z.string().email('Enter a valid email address'),
+    email: emailField,
     otp: z.string().trim().min(4, 'Enter the reset code').max(12),
-    new_password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters'),
-    confirm_password: z.string(),
+    new_password: strongPasswordField,
+    confirm_password: z.string().min(1, 'Confirm your password'),
   })
   .refine((values) => values.new_password === values.confirm_password, {
     message: 'Passwords do not match',

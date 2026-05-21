@@ -76,7 +76,7 @@ export function ReviewStep({
       <ul className="space-y-2">
         <ChecklistItem label="Profile submitted" done={profileCompleted} />
         <ChecklistItem
-          label="Documents uploaded"
+          label="Documents uploaded (license required)"
           done={documentsUploaded > 0}
           detail={`${documentsUploaded} file${documentsUploaded === 1 ? '' : 's'}`}
         />

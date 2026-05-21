@@ -8,6 +8,9 @@ export type DoctorAppointment = {
   workflow_status: AppointmentWorkflowStatus
   doctor_id?: string | null
   doctor_name?: string | null
+  patient_id?: string | null
+  patient_name?: string | null
+  patient_email?: string | null
   issue?: string | null
   starts_at: string
   ends_at: string

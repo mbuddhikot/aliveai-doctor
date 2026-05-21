@@ -13,6 +13,8 @@ import { CalendarPage } from '../../pages/dashboard/routes/CalendarPage'
 import { MyAppointmentsPage } from '../../pages/dashboard/routes/MyAppointmentsPage'
 import { AvailabilityPage } from '../../pages/dashboard/routes/AvailabilityPage'
 import { ComingSoonPage } from '../../pages/dashboard/routes/ComingSoonPage'
+import { PatientRecordsPage } from '../../pages/dashboard/routes/PatientRecordsPage'
+import { DoctorProfilePage } from '../../pages/dashboard/routes/DoctorProfilePage'
 import { DoctorOnboardingPage } from '../../pages/doctor-onboarding/DoctorOnboardingPage'
 
 function IndexRedirect() {
@@ -41,15 +43,12 @@ export function AppRouter() {
           <Route index element={<DashboardHomePage />} />
           <Route path="appointments" element={<MyAppointmentsPage />} />
           <Route path="calendar" element={<CalendarPage />} />
-          <Route
-            path="patient-records"
-            element={<ComingSoonPage title="Patient Records" />}
-          />
+          <Route path="patient-records" element={<PatientRecordsPage />} />
           <Route
             path="availability"
             element={<AvailabilityPage />}
           />
-          <Route path="profile" element={<ComingSoonPage title="Profile" />} />
+          <Route path="profile" element={<DoctorProfilePage />} />
         </Route>
       </Route>
 

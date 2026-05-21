@@ -35,7 +35,7 @@ export function formatAppointmentTimeRange(startsAt: string, endsAt: string): st
 
 export function formatFee(amount?: number | null, currency?: string | null): string | null {
   if (amount == null || !Number.isFinite(amount)) return null
-  const code = currency?.trim() || 'INR'
+  const code = currency?.trim() || 'USD'
   try {
     return new Intl.NumberFormat('en', {
       style: 'currency',

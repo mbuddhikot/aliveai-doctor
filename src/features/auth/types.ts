@@ -57,7 +57,6 @@ export type AuthContextValue = {
   user: AuthUser | null
   isAuthenticated: boolean
   signIn: (payload: SignInPayload) => Promise<AuthUser>
-  signInDemo: () => AuthUser
   signUp: (payload: SignUpPayload) => Promise<SignUpResult>
   verifyOtp: (payload: VerifyOtpPayload) => Promise<void>
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<void>

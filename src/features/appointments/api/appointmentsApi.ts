@@ -1,4 +1,5 @@
 import { apiClient, extractApiErrorMessage } from '../../../lib/apiClient'
+import { normalizeAppointmentList } from '../lib/normalizeAppointment'
 import type {
   AppointmentListResponse,
   ApproveAppointmentPayload,
@@ -7,23 +8,31 @@ import type {
   RescheduleAppointmentPayload,
 } from '../types'
 
+export const DOCTOR_APPOINTMENTS_QUERY_KEY = 'doctor-appointments'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 export async function listDoctorAppointments(params: {
   doctorId: string
   status?: string
 }): Promise<AppointmentListResponse> {
   try {
-    const { data } = await apiClient.get<AppointmentListResponse>(
-      '/v1/doctor/appointments',
-      {
-        params: {
-          doctor_id: params.doctorId,
-          ...(params.status ? { status: params.status } : {}),
-        },
+    const { data } = await apiClient.get<unknown>('/v1/doctor/appointments', {
+      params: {
+        doctor_id: params.doctorId,
+        ...(params.status ? { status: params.status } : {}),
       },
-    )
+    })
+    const appointments = normalizeAppointmentList(data)
+    const total =
+      isRecord(data) && typeof data.total === 'number'
+        ? data.total
+        : appointments.length
     return {
-      data: data.data ?? [],
-      total: data.total ?? 0,
+      data: appointments,
+      total,
     }
   } catch (err) {
     throw new Error(

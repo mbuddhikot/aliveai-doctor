@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/hooks/useAuth'
 import { getDoctorVerificationStatus } from '../../features/doctor-onboarding/api/doctorOnboardingApi'
+import { DOCTOR_VERIFICATION_QUERY_KEY } from '../../features/doctor-onboarding/hooks/useDoctorOnboarding'
 import { isDoctorOnboardingComplete } from '../../features/doctor-onboarding/utils/access'
 
 export function ProtectedRoute() {
@@ -11,12 +12,10 @@ export function ProtectedRoute() {
   const isOnboardingPath = location.pathname.startsWith('/doctor-onboarding')
 
   const shouldCheckDoctorVerification =
-    isAuthenticated &&
-    user?.role === 'doctor' &&
-    user.is_verified === false
+    isAuthenticated && user?.role === 'doctor' && user.is_verified !== true
 
   const verificationQuery = useQuery({
-    queryKey: ['doctor-verification-status'],
+    queryKey: DOCTOR_VERIFICATION_QUERY_KEY,
     queryFn: getDoctorVerificationStatus,
     enabled: shouldCheckDoctorVerification,
     staleTime: 30_000,
@@ -31,7 +30,7 @@ export function ProtectedRoute() {
 
   const needsDoctorOnboarding =
     user?.role === 'doctor' &&
-    user.is_verified === false &&
+    user.is_verified !== true &&
     !doctorVerifiedOnServer
 
   useEffect(() => {

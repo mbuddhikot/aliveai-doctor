@@ -21,6 +21,10 @@ export function DoctorOnboardingPage() {
     documents,
     canOpenDocuments,
     canOpenReview,
+    hasLicenseDocument,
+    isBootstrapping,
+    savedProfile,
+    profileQuery,
     statusQuery,
     saveProfileMutation,
     uploadDocumentMutation,
@@ -28,7 +32,6 @@ export function DoctorOnboardingPage() {
   } = useDoctorOnboarding()
 
   const statusMeta = STATUS_META[status]
-  const isLoading = statusQuery.isLoading
 
   if (isFullyVerified && statusQuery.isSuccess) {
     return (
@@ -86,16 +89,16 @@ export function DoctorOnboardingPage() {
         <OnboardingStepper
           activeStep={activeStep}
           profileDone={profileCompleted}
-          documentsDone={documentsUploaded > 0}
+          documentsDone={hasLicenseDocument}
           onStepClick={goToStep}
           canOpenDocuments={canOpenDocuments}
           canOpenReview={canOpenReview}
         />
 
         <section className="mt-6 rounded-[16px] border border-[#e6e8ee] bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.06)] sm:p-8">
-          {isLoading ? (
+          {isBootstrapping ? (
             <div className="py-16 text-center text-sm font-medium text-[#64748b]">
-              Loading your verification status…
+              Loading your profile and verification status…
             </div>
           ) : statusQuery.isError ? (
             <div className="py-8 text-center">
@@ -118,6 +121,8 @@ export function DoctorOnboardingPage() {
               {activeStep === 'profile' && (
                 <ProfileStepForm
                   user={user}
+                  savedProfile={savedProfile}
+                  profileLoading={profileQuery.isLoading}
                   profileCompleted={profileCompleted}
                   isSaving={saveProfileMutation.isPending}
                   saveError={saveProfileMutation.error}

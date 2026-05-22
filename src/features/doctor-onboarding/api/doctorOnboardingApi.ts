@@ -1,29 +1,84 @@
 import axios from 'axios'
 import { apiClient, extractApiErrorMessage } from '../../../lib/apiClient'
+import { DEFAULT_PROFILE_TIMEZONE } from '../constants'
 import type {
   DoctorDocument,
   DoctorDocumentType,
   DoctorDocumentUploadResponse,
   DoctorProfile,
-  DoctorProfilePayload,
+  DoctorProfileCreatePayload,
+  DoctorProfileUpdatePayload,
   DoctorVerificationSummary,
 } from '../types'
 
-function normalizeDoctorProfile(data: DoctorProfile): DoctorProfile {
+const PROFILE_ENDPOINT = '/v1/doctor/profile'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function str(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return null
+}
+
+function strArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+}
+
+function num(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (value != null && value !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function parseDoctorProfile(payload: unknown): DoctorProfile {
+  const raw = isRecord(payload)
+    ? isRecord(payload.data)
+      ? payload.data
+      : payload
+    : null
+
+  if (!raw) {
+    throw new Error('Invalid doctor profile response from the API')
+  }
+
+  const verification = str(raw.verification_status) ?? 'none'
+  const validStatus =
+    verification === 'none' ||
+    verification === 'pending' ||
+    verification === 'verified' ||
+    verification === 'rejected'
+      ? verification
+      : 'none'
+
   return {
-    ...data,
-    full_name: data.full_name?.trim() ?? '',
-    specialty: data.specialty?.trim() ?? null,
-    qualifications: data.qualifications ?? [],
-    registration_number: data.registration_number?.trim() ?? null,
-    phone: data.phone?.trim() ?? null,
-    bio: data.bio ?? null,
-    years_experience: data.years_experience ?? null,
-    fee_amount: data.fee_amount ?? null,
-    fee_currency: data.fee_currency ?? null,
-    session_minutes: data.session_minutes ?? 30,
-    verification_status: data.verification_status || 'none',
-    is_active: Boolean(data.is_active),
+    id: String(raw.id || ''),
+    user_id: str(raw.user_id),
+    full_name: str(raw.full_name) ?? '',
+    specialty: str(raw.specialty),
+    qualifications: strArray(raw.qualifications),
+    registration_number: str(raw.registration_number),
+    phone: str(raw.phone),
+    years_experience: num(raw.years_experience),
+    bio: str(raw.bio),
+    fee_amount: num(raw.fee_amount),
+    fee_currency: str(raw.fee_currency),
+    session_minutes: num(raw.session_minutes) ?? 30,
+    timezone: str(raw.timezone) ?? DEFAULT_PROFILE_TIMEZONE,
+    verification_status: validStatus,
+    is_active: raw.is_active !== false,
+    profile_completed_at: str(raw.profile_completed_at),
+    verified_at: str(raw.verified_at),
+    rejection_reason: str(raw.rejection_reason),
+    created_at: String(raw.created_at || new Date().toISOString()),
+    updated_at: String(raw.updated_at || new Date().toISOString()),
   }
 }
 
@@ -38,22 +93,50 @@ function normalizeDocument(doc: DoctorDocument): DoctorDocument {
   }
 }
 
-async function requestProfile(
-  method: 'post' | 'put',
-  payload: DoctorProfilePayload,
+function toUpdatePayload(
+  payload: DoctorProfileCreatePayload,
+): DoctorProfileUpdatePayload {
+  return {
+    full_name: payload.full_name,
+    specialty: payload.specialty,
+    qualifications: payload.qualifications,
+    registration_number: payload.registration_number,
+    phone: payload.phone,
+    years_experience: payload.years_experience,
+    bio: payload.bio ?? null,
+    fee_amount: payload.fee_amount ?? null,
+    fee_currency: payload.fee_currency ?? null,
+    session_minutes: payload.session_minutes ?? null,
+    timezone: payload.timezone ?? DEFAULT_PROFILE_TIMEZONE,
+  }
+}
+
+async function createDoctorProfile(
+  payload: DoctorProfileCreatePayload,
 ): Promise<DoctorProfile> {
-  const { data } = await apiClient[method]<DoctorProfile>(
-    '/v1/doctor/profile',
-    payload,
+  const { data } = await apiClient.post<unknown>(PROFILE_ENDPOINT, payload, {
+    validateStatus: (status) => status === 201 || status === 200,
+  })
+  return parseDoctorProfile(data)
+}
+
+async function updateDoctorProfile(
+  payload: DoctorProfileCreatePayload,
+): Promise<DoctorProfile> {
+  const { data } = await apiClient.put<unknown>(
+    PROFILE_ENDPOINT,
+    toUpdatePayload(payload),
   )
-  return normalizeDoctorProfile(data)
+  return parseDoctorProfile(data)
 }
 
 /** GET /v1/doctor/profile — returns null when no profile exists yet (404). */
 export async function getDoctorProfile(): Promise<DoctorProfile | null> {
   try {
-    const { data } = await apiClient.get<DoctorProfile>('/v1/doctor/profile')
-    return normalizeDoctorProfile(data)
+    const { data } = await apiClient.get<unknown>(PROFILE_ENDPOINT)
+    const profile = parseDoctorProfile(data)
+    if (!profile.id) return null
+    return profile
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.status === 404) {
       return null
@@ -65,20 +148,30 @@ export async function getDoctorProfile(): Promise<DoctorProfile | null> {
   }
 }
 
-/** POST /v1/doctor/profile (create) or PUT /v1/doctor/profile (update). */
+/**
+ * POST /v1/doctor/profile (create, 201) or PUT /v1/doctor/profile (partial update).
+ * @see https://aliveai-backend-api-927940582634.us-central1.run.app/docs#/doctor-onboarding/create_doctor_profile_v1_doctor_profile_post
+ */
 export async function saveDoctorProfile(
-  payload: DoctorProfilePayload,
+  payload: DoctorProfileCreatePayload,
   profileAlreadyExists = false,
 ): Promise<DoctorProfile> {
   if (profileAlreadyExists) {
-    return requestProfile('put', payload)
+    try {
+      return await updateDoctorProfile(payload)
+    } catch (err) {
+      throw new Error(
+        extractApiErrorMessage(err, 'Unable to update doctor profile'),
+        { cause: err },
+      )
+    }
   }
 
   try {
-    return await requestProfile('post', payload)
+    return await createDoctorProfile(payload)
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.status === 409) {
-      return requestProfile('put', payload)
+      return updateDoctorProfile(payload)
     }
     throw new Error(
       extractApiErrorMessage(err, 'Unable to save doctor profile'),

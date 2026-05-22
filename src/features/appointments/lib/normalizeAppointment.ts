@@ -90,6 +90,8 @@ export function normalizeDoctorAppointment(item: RawAppointment): DoctorAppointm
     issue: str(item.issue) ?? str(item.reason) ?? str(item.purpose) ?? null,
     starts_at: String(item.starts_at || item.start_time || item.date || ''),
     ends_at: String(item.ends_at || item.end_time || item.starts_at || ''),
+    doctor_timezone:
+      str(item.doctor_timezone) ?? str(item.doctorTimezone) ?? null,
     duration_minutes: Number(item.duration_minutes ?? item.duration ?? 30) || 30,
     fee_amount:
       typeof item.fee_amount === 'number'

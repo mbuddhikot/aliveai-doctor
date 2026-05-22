@@ -10,7 +10,7 @@ import {
 } from '../api/doctorOnboardingApi'
 import type { OnboardingStep } from '../constants'
 import { profileExists } from '../lib/profileMappers'
-import type { DoctorDocumentType, DoctorProfilePayload } from '../types'
+import type { DoctorDocumentType, DoctorProfileCreatePayload } from '../types'
 import { isDoctorOnboardingComplete } from '../utils/access'
 
 export const DOCTOR_PROFILE_QUERY_KEY = ['doctor-profile'] as const
@@ -114,7 +114,7 @@ export function useDoctorOnboarding() {
   ])
 
   const saveProfileMutation = useMutation({
-    mutationFn: (payload: DoctorProfilePayload) =>
+    mutationFn: (payload: DoctorProfileCreatePayload) =>
       saveDoctorProfile(payload, hasExistingProfile),
     onSuccess: async (profile) => {
       queryClient.setQueryData(DOCTOR_PROFILE_QUERY_KEY, profile)

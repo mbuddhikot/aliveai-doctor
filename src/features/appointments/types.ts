@@ -14,6 +14,8 @@ export type DoctorAppointment = {
   issue?: string | null
   starts_at: string
   ends_at: string
+  /** IANA timezone for display; from API doctor_timezone or profile. */
+  doctor_timezone?: string | null
   duration_minutes: number
   fee_amount?: number | null
   fee_currency?: string | null

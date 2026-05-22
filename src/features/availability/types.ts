@@ -30,6 +30,7 @@ export type AvailabilityException = {
   unavailable: boolean
 }
 
+/** UI model — booking rules kept locally; weekly slots sync with the API. */
 export type DoctorAvailability = {
   timezone: string
   slotDurationMinutes: number
@@ -38,4 +39,26 @@ export type DoctorAvailability = {
   weekly: DayAvailability[]
   exceptions: AvailabilityException[]
   updatedAt?: string
+}
+
+/** Backend: 0 = Monday … 6 = Sunday */
+export type ApiAvailabilitySlot = {
+  weekday: number
+  start_time: string
+  end_time: string
+  is_available: boolean
+}
+
+export type DoctorAvailabilityResponse = {
+  doctor_id: string
+  slots: ApiAvailabilitySlot[]
+}
+
+export type DoctorAvailabilitySetRequest = {
+  slots: Array<{
+    weekday: number
+    start_time: string
+    end_time: string
+    is_available?: boolean
+  }>
 }

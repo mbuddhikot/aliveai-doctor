@@ -7,6 +7,7 @@ import clsx from 'clsx'
 import { PhoneNumberField } from '../../../components/common/PhoneNumberField'
 import type { AuthUser } from '../../auth/types'
 import { getSpecializations } from '../api/specializationsApi'
+import { PROFILE_TIMEZONES } from '../constants'
 import {
   authUserToProfileDefaults,
   doctorProfileToFormValues,
@@ -259,6 +260,30 @@ export function ProfileStepForm({
             disabled={profileLoading || isSaving}
             {...register('session_minutes')}
           />
+        </FormField>
+
+        <FormField
+          label="Timezone"
+          hint="Used for scheduling and patient booking slots"
+          error={errors.timezone?.message}
+        >
+          <select
+            className={clsx(
+              inputClass(Boolean(errors.timezone)),
+              'appearance-none bg-white bg-[length:16px] bg-[right_16px_center] bg-no-repeat text-black',
+            )}
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+            }}
+            disabled={profileLoading || isSaving}
+            {...register('timezone')}
+          >
+            {PROFILE_TIMEZONES.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <div className="md:col-span-2">

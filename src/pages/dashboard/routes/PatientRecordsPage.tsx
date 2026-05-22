@@ -20,10 +20,12 @@ import {
   WorkflowBadge,
 } from '../../../features/appointments/components/AppointmentBadges'
 import {
+  appointmentDoctorTimezone,
   formatAppointmentDateTime,
   formatAppointmentTimeRange,
   formatFee,
 } from '../../../features/appointments/lib/format'
+import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import type { DoctorAppointment } from '../../../features/appointments/types'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import {
@@ -103,7 +105,14 @@ function PatientListItem({
   )
 }
 
-function VisitRow({ appointment }: { appointment: DoctorAppointment }) {
+function VisitRow({
+  appointment,
+  profileTimezone,
+}: {
+  appointment: DoctorAppointment
+  profileTimezone: string
+}) {
+  const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
   const fee = formatFee(appointment.fee_amount, appointment.fee_currency)
 
   return (
@@ -115,13 +124,14 @@ function VisitRow({ appointment }: { appointment: DoctorAppointment }) {
           </p>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-[#64748b]">
             <FiCalendar className="h-3.5 w-3.5 shrink-0" />
-            {formatAppointmentDateTime(appointment.starts_at)}
+            {formatAppointmentDateTime(appointment.starts_at, doctorTimezone)}
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#64748b]">
             <FiClock className="h-3.5 w-3.5 shrink-0" />
             {formatAppointmentTimeRange(
               appointment.starts_at,
               appointment.ends_at,
+              doctorTimezone,
             )}{' '}
             · {appointment.duration_minutes} min
           </p>
@@ -138,12 +148,18 @@ function VisitRow({ appointment }: { appointment: DoctorAppointment }) {
   )
 }
 
-function PatientDetailPanel({ patient }: { patient: PatientSummary }) {
+function PatientDetailPanel({
+  patient,
+  profileTimezone,
+}: {
+  patient: PatientSummary
+  profileTimezone: string
+}) {
   const lastVisit = patient.lastVisitAt
-    ? formatAppointmentDateTime(patient.lastVisitAt)
+    ? formatAppointmentDateTime(patient.lastVisitAt, profileTimezone)
     : '—'
   const nextVisit = patient.nextVisitAt
-    ? formatAppointmentDateTime(patient.nextVisitAt)
+    ? formatAppointmentDateTime(patient.nextVisitAt, profileTimezone)
     : '—'
 
   return (
@@ -189,7 +205,11 @@ function PatientDetailPanel({ patient }: { patient: PatientSummary }) {
         <h3 className="text-sm font-bold text-black">Visit history</h3>
         <div className="mt-3 space-y-2">
           {patient.appointments.map((appointment) => (
-            <VisitRow key={appointment.id} appointment={appointment} />
+            <VisitRow
+              key={appointment.id}
+              appointment={appointment}
+              profileTimezone={profileTimezone}
+            />
           ))}
         </div>
       </div>
@@ -200,6 +220,7 @@ function PatientDetailPanel({ patient }: { patient: PatientSummary }) {
 export function PatientRecordsPage() {
   const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
     useDoctorId()
+  const { doctorTimezone: profileTimezone } = useDoctorTimezone()
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<string>()
   const appointmentsQuery = useQuery({
@@ -354,7 +375,10 @@ export function PatientRecordsPage() {
           </section>
 
           {selectedPatient ? (
-            <PatientDetailPanel patient={selectedPatient} />
+            <PatientDetailPanel
+              patient={selectedPatient}
+              profileTimezone={profileTimezone}
+            />
           ) : (
             <section className="flex items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
               Select a patient to view visit history.

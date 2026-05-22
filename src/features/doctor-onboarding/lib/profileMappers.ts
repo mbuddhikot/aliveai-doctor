@@ -6,7 +6,8 @@ import {
 import { findCountryByDialCode, parseStoredPhone } from '../../../lib/phone'
 import type { AuthUser } from '../../auth/types'
 import { formatDoctorFullName } from '../../auth/utils/doctorName'
-import type { DoctorProfile, DoctorProfilePayload } from '../types'
+import { DEFAULT_PROFILE_TIMEZONE } from '../constants'
+import type { DoctorProfile } from '../types'
 import type { DoctorProfileFormValues } from './profileSchema'
 
 const FALLBACK_COUNTRY: Country = {
@@ -52,6 +53,7 @@ export function authUserToProfileDefaults(
     fee_amount: undefined,
     fee_currency: 'USD',
     session_minutes: 30,
+    timezone: DEFAULT_PROFILE_TIMEZONE,
   }
 }
 
@@ -75,6 +77,7 @@ export function doctorProfileToFormValues(
         ? 'USD'
         : profile.fee_currency.trim(),
     session_minutes: profile.session_minutes ?? 30,
+    timezone: profile.timezone?.trim() || DEFAULT_PROFILE_TIMEZONE,
   }
 }
 

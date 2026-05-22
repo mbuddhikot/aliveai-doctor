@@ -2,6 +2,21 @@ import type { DoctorDocumentType, DoctorVerificationStatus } from './types'
 
 export type OnboardingStep = 'profile' | 'documents' | 'review'
 
+/** IANA timezones supported by POST /v1/doctor/profile (see OpenAPI). */
+export const PROFILE_TIMEZONES: { value: string; label: string }[] = [
+  { value: 'America/New_York', label: 'Eastern (America/New_York)' },
+  { value: 'America/Chicago', label: 'Central (America/Chicago)' },
+  { value: 'America/Denver', label: 'Mountain (America/Denver)' },
+  { value: 'America/Los_Angeles', label: 'Pacific (America/Los_Angeles)' },
+  { value: 'America/Phoenix', label: 'Arizona (America/Phoenix)' },
+  { value: 'America/Anchorage', label: 'Alaska (America/Anchorage)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii (Pacific/Honolulu)' },
+  { value: 'Asia/Kolkata', label: 'India (Asia/Kolkata)' },
+  { value: 'UTC', label: 'UTC' },
+]
+
+export const DEFAULT_PROFILE_TIMEZONE = 'America/New_York'
+
 export const ONBOARDING_STEPS: { id: OnboardingStep; label: string }[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'documents', label: 'Documents' },

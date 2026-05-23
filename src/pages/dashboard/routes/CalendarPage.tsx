@@ -105,32 +105,21 @@ function sortByTime(appointments: CalendarAppointment[]): CalendarAppointment[] 
   )
 }
 
-function StatCard({
+function StatPill({
   label,
   value,
-  hint,
   icon,
 }: {
   label: string
   value: string
-  hint: string
   icon: ReactNode
 }) {
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white p-5 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-[#64748b]">{label}</p>
-          <div className="mt-2 text-3xl font-bold leading-none text-black">
-            {value}
-          </div>
-        </div>
-        <span className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#f3edff] text-[#8a37ff]">
-          {icon}
-        </span>
-      </div>
-      <p className="mt-3 text-sm text-[#64748b]">{hint}</p>
-    </section>
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-2 py-1 text-xs">
+      <span className="text-[#8a37ff]">{icon}</span>
+      <span className="font-bold text-black">{value}</span>
+      <span className="text-[#64748b]">{label}</span>
+    </span>
   )
 }
 
@@ -139,7 +128,7 @@ function StatusBadge({ status }: { status: AppointmentStatus }) {
   return (
     <span
       className={clsx(
-        'inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs font-bold',
+        'inline-flex h-6 items-center gap-1.5 rounded border px-2 text-[10px] font-bold',
         meta.className,
       )}
     >
@@ -149,30 +138,61 @@ function StatusBadge({ status }: { status: AppointmentStatus }) {
   )
 }
 
-function SegmentedControl({
-  value,
-  onChange,
+const VIEW_TABS: { id: CalendarView; label: string }[] = [
+  { id: 'month', label: 'Month' },
+  { id: 'week', label: 'Week' },
+  { id: 'day', label: 'Day' },
+]
+
+function CalendarViewSearchBar({
+  view,
+  onViewChange,
+  search,
+  onSearchChange,
 }: {
-  value: CalendarView
-  onChange: (value: CalendarView) => void
+  view: CalendarView
+  onViewChange: (value: CalendarView) => void
+  search: string
+  onSearchChange: (value: string) => void
 }) {
   return (
-    <div className="grid h-10 w-full min-w-[216px] grid-cols-3 rounded-md border border-[#dfe3ea] bg-[#f8fafc] p-1 sm:w-[216px]">
-      {(['month', 'week', 'day'] as CalendarView[]).map((view) => (
-        <button
-          key={view}
-          type="button"
-          onClick={() => onChange(view)}
-          className={clsx(
-            'rounded text-sm font-bold capitalize transition',
-            value === view
-              ? 'bg-white text-[#8a37ff] shadow-sm'
-              : 'text-[#64748b] hover:text-[#111827]',
-          )}
-        >
-          {view}
-        </button>
-      ))}
+    <div className="flex h-8 min-w-0 flex-1 items-stretch overflow-hidden rounded-md border border-[#dfe3ea] bg-white focus-within:border-[#8a37ff] focus-within:ring-1 focus-within:ring-[#8a37ff]/25">
+      <div
+        className="flex shrink-0 items-stretch border-r border-[#dfe3ea] bg-[#f8fafc]"
+        role="tablist"
+        aria-label="Calendar view"
+      >
+        {VIEW_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={view === tab.id}
+            onClick={() => onViewChange(tab.id)}
+            className={clsx(
+              'px-2.5 text-[10px] font-bold transition sm:px-3 sm:text-[11px]',
+              view === tab.id
+                ? 'bg-white text-[#8a37ff]'
+                : 'text-[#64748b] hover:bg-white/60 hover:text-[#111827]',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <label className="relative flex min-w-0 flex-1 items-center">
+        <FiSearch
+          className="pointer-events-none absolute left-2 h-3 w-3 text-[#94a3b8]"
+          aria-hidden
+        />
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search patient or reason"
+          className="h-full w-full min-w-0 border-0 bg-transparent py-0 pl-7 pr-2 text-xs text-[#111827] outline-none placeholder:text-[#94a3b8] focus:ring-0"
+        />
+      </label>
     </div>
   )
 }
@@ -188,7 +208,7 @@ function AppointmentPill({
     <button
       type="button"
       onClick={onClick}
-      className="block w-full rounded px-2 py-1 text-left text-xs font-semibold text-[#253047] transition hover:bg-[#f3edff]"
+      className="block w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-semibold text-[#253047] transition hover:bg-[#f3edff]"
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span
@@ -226,12 +246,12 @@ function MonthCalendar({
   const todayKey = doctorTodayKey(doctorTimezone)
 
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="grid grid-cols-7 border-b border-[#edf0f4]">
+    <section className="overflow-hidden rounded-lg border border-[#dfe3ea] bg-white shadow-sm">
+      <div className="grid grid-cols-7 border-b border-[#edf0f4] bg-[#f8fafc]">
         {WEEKDAYS.map((day) => (
           <div
             key={day}
-            className="px-3 py-3 text-center text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]"
+            className="px-1 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-[#64748b]"
           >
             {day}
           </div>
@@ -247,7 +267,7 @@ function MonthCalendar({
             <div
               key={key}
               className={clsx(
-                'min-h-[126px] border-b border-r border-[#edf0f4] p-2 last:border-r-0',
+                'min-h-[76px] border-b border-r border-[#edf0f4] p-1 last:border-r-0 sm:min-h-[84px]',
                 isSelected && 'bg-[#faf7ff]',
                 isMuted && 'bg-[#fbfcfe]',
               )}
@@ -256,7 +276,7 @@ function MonthCalendar({
                 type="button"
                 onClick={() => onSelectDate(key)}
                 className={clsx(
-                  'inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold transition',
+                  'inline-flex h-6 w-6 items-center justify-center rounded text-xs font-bold transition sm:h-7 sm:w-7',
                   key === todayKey
                     ? 'bg-[#8a37ff] text-white'
                     : isSelected
@@ -269,21 +289,21 @@ function MonthCalendar({
                 {dayOfMonthInZone(key, doctorTimezone)}
               </button>
 
-              <div className="mt-1 space-y-1">
-                {dayAppointments.slice(0, 3).map((appointment) => (
+              <div className="mt-0.5 space-y-0.5">
+                {dayAppointments.slice(0, 2).map((appointment) => (
                   <AppointmentPill
                     key={appointment.id}
                     appointment={appointment}
                     onClick={() => onSelectAppointment(appointment)}
                   />
                 ))}
-                {dayAppointments.length > 3 ? (
+                {dayAppointments.length > 2 ? (
                   <button
                     type="button"
                     onClick={() => onSelectDate(key)}
-                    className="px-2 text-xs font-bold text-[#8a37ff]"
+                    className="px-1 text-[10px] font-bold text-[#8a37ff]"
                   >
-                    +{dayAppointments.length - 3} more
+                    +{dayAppointments.length - 2}
                   </button>
                 ) : null}
               </div>
@@ -307,14 +327,12 @@ function AgendaList({
   onSelect: (appointment: CalendarAppointment) => void
 }) {
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="border-b border-[#edf0f4] px-5 py-4">
-        <h2 className="text-xl font-bold text-black">{title}</h2>
-        <p className="mt-1 text-sm text-[#64748b]">
-          {appointments.length} booked slots
-        </p>
+    <section className="rounded-lg border border-[#dfe3ea] bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-[#edf0f4] px-3 py-2">
+        <h2 className="text-sm font-bold text-black">{title}</h2>
+        <span className="text-xs text-[#64748b]">{appointments.length} slots</span>
       </div>
-      <div className="max-h-[540px] space-y-3 overflow-auto p-4">
+      <div className="max-h-[200px] space-y-1.5 overflow-auto p-2 sm:max-h-[240px]">
         {appointments.length > 0 ? (
           sortByTime(appointments).map((appointment) => (
             <button
@@ -322,44 +340,29 @@ function AgendaList({
               type="button"
               onClick={() => onSelect(appointment)}
               className={clsx(
-                'w-full rounded-md border p-4 text-left transition',
+                'w-full rounded-md border px-2.5 py-2 text-left transition',
                 selectedId === appointment.id
                   ? 'border-[#8a37ff] bg-[#faf7ff]'
                   : 'border-[#edf0f4] bg-white hover:border-[#cfd6e1] hover:bg-[#fbfcfe]',
               )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-[#111827]">
-                    {formatWallClockTime(appointment.start)} -{' '}
-                    {formatWallClockTime(appointment.end)}
-                  </div>
-                  <div className="mt-1 text-base font-bold text-black">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-bold text-black">
                     {appointment.patientName}
+                  </div>
+                  <div className="text-[11px] text-[#64748b]">
+                    {formatWallClockTime(appointment.start)} –{' '}
+                    {formatWallClockTime(appointment.end)}
                   </div>
                 </div>
                 <StatusBadge status={appointment.status} />
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-[#64748b]">
-                <span className="inline-flex items-center gap-1.5">
-                  {MODE_META[appointment.mode].icon}
-                  {MODE_META[appointment.mode].label}
-                </span>
-                <span>{appointment.reason}</span>
-              </div>
             </button>
           ))
         ) : (
-          <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] p-6 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-[#f3edff] text-[#8a37ff]">
-              <FiCalendar className="h-6 w-6" />
-            </div>
-            <div className="mt-3 text-base font-bold text-[#111827]">
-              No booked slots
-            </div>
-            <p className="mt-1 text-sm text-[#64748b]">
-              Slots will appear here when patients book appointments.
-            </p>
+          <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] px-3 py-4 text-center text-xs text-[#64748b]">
+            No slots on this day.
           </div>
         )}
       </div>
@@ -375,25 +378,19 @@ function AppointmentDetails({
   doctorTimezone: string
 }) {
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="border-b border-[#edf0f4] px-5 py-4">
-        <h2 className="text-xl font-bold text-black">Slot details</h2>
-        <p className="mt-1 text-sm text-[#64748b]">
-          Review patient, timing, and appointment status.
-        </p>
+    <section className="rounded-lg border border-[#dfe3ea] bg-white shadow-sm xl:sticky xl:top-2 xl:self-start">
+      <div className="border-b border-[#edf0f4] px-3 py-2">
+        <h2 className="text-sm font-bold text-black">Slot details</h2>
       </div>
       {appointment ? (
-        <div className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#f8d7c7] to-[#4f9bbd] text-white">
-                <FiUser className="h-6 w-6" />
-              </div>
-              <h3 className="mt-4 text-2xl font-bold text-black">
+        <div className="space-y-2 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-bold text-black">
                 {appointment.patientName}
               </h3>
               {appointment.patientEmail ? (
-                <p className="mt-1 text-sm text-[#64748b]">
+                <p className="truncate text-xs text-[#64748b]">
                   {appointment.patientEmail}
                 </p>
               ) : null}
@@ -401,60 +398,47 @@ function AppointmentDetails({
             <StatusBadge status={appointment.status} />
           </div>
 
-          <div className="mt-5 grid gap-3">
-            <div className="rounded-md bg-[#f8fafc] p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">
-                Date and time
-              </div>
-              <div className="mt-2 text-base font-bold text-[#111827]">
-                {formatDoctorLongDate(appointment.date, doctorTimezone)}
-              </div>
-              <div className="mt-1 text-sm text-[#64748b]">
-                {formatWallClockTime(appointment.start)} -{' '}
-                {formatWallClockTime(appointment.end)}
-              </div>
+          <div className="rounded-md bg-[#f8fafc] px-2.5 py-2 text-xs">
+            <div className="font-bold text-[#111827]">
+              {formatDoctorLongDate(appointment.date, doctorTimezone)}
             </div>
-            <div className="rounded-md bg-[#f8fafc] p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">
-                Visit mode
-              </div>
-              <div className="mt-2 inline-flex items-center gap-2 text-base font-bold text-[#111827]">
-                {MODE_META[appointment.mode].icon}
-                {MODE_META[appointment.mode].label}
-              </div>
+            <div className="text-[#64748b]">
+              {formatWallClockTime(appointment.start)} –{' '}
+              {formatWallClockTime(appointment.end)}
             </div>
-            <div className="rounded-md bg-[#f8fafc] p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">
-                Reason
-              </div>
-              <div className="mt-2 text-base font-bold text-[#111827]">
-                {appointment.reason}
-              </div>
-              {appointment.notes ? (
-                <p className="mt-2 text-sm text-[#64748b]">{appointment.notes}</p>
-              ) : null}
+            <div className="mt-1 inline-flex items-center gap-1 text-[#64748b]">
+              {MODE_META[appointment.mode].icon}
+              {MODE_META[appointment.mode].label}
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="rounded-md bg-[#f8fafc] px-2.5 py-2 text-xs">
+            <div className="font-semibold text-[#64748b]">Reason</div>
+            <div className="font-bold text-[#111827]">{appointment.reason}</div>
+            {appointment.notes ? (
+              <p className="mt-1 text-[#64748b]">{appointment.notes}</p>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className="h-11 rounded-md border border-[#dfe3ea] bg-white text-sm font-bold text-[#253047] transition hover:bg-[#f8fafc]"
+              className="h-8 rounded-md border border-[#dfe3ea] bg-white text-xs font-bold text-[#253047] transition hover:bg-[#f8fafc]"
             >
               Reschedule
             </button>
             <button
               type="button"
-              className="h-11 rounded-md bg-[#8a37ff] text-sm font-bold text-white shadow-[0_8px_20px_rgba(138,55,255,0.2)] transition hover:bg-[#772cf0]"
+              className="h-8 rounded-md bg-[#8a37ff] text-xs font-bold text-white transition hover:bg-[#772cf0]"
             >
               Start visit
             </button>
           </div>
         </div>
       ) : (
-        <div className="p-5">
-          <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] p-6 text-center text-sm text-[#64748b]">
-            Select a booked slot to see appointment details.
+        <div className="p-3">
+          <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] px-3 py-4 text-center text-xs text-[#64748b]">
+            Select a slot for details.
           </div>
         </div>
       )}
@@ -476,8 +460,8 @@ function WeekStrip({
   const days = weekDayKeysAround(selectedDate, doctorTimezone)
 
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white p-4 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+    <section className="rounded-lg border border-[#dfe3ea] bg-white p-2 shadow-sm">
+      <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
         {days.map((key) => {
           const count = appointmentsByDate.get(key)?.length || 0
           return (
@@ -486,21 +470,21 @@ function WeekStrip({
               type="button"
               onClick={() => onSelectDate(key)}
               className={clsx(
-                'rounded-md border p-3 text-left transition',
+                'rounded-md border px-2 py-1.5 text-left transition',
                 key === selectedDate
                   ? 'border-[#8a37ff] bg-[#faf7ff]'
                   : 'border-[#edf0f4] bg-white hover:bg-[#f8fafc]',
               )}
             >
-              <div className="text-xs font-bold uppercase text-[#64748b]">
+              <div className="text-[10px] font-bold uppercase text-[#64748b]">
                 {weekdayShortInZone(key, doctorTimezone)}
               </div>
-              <div className="mt-1 text-2xl font-bold text-black">
+              <div className="text-lg font-bold leading-tight text-black">
                 {dayOfMonthInZone(key, doctorTimezone)}
               </div>
-              <div className="mt-2 text-xs font-bold text-[#8a37ff]">
-                {count} slots
-              </div>
+              {count > 0 ? (
+                <div className="text-[10px] font-bold text-[#8a37ff]">{count}</div>
+              ) : null}
             </button>
           )
         })}
@@ -625,146 +609,125 @@ export function CalendarPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-md border border-[#dfe3ea] bg-white px-5 py-5 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#f3edff] px-3 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[#8a37ff]">
-              <FiCalendar className="h-4 w-4" />
-              Booked slots
-            </div>
-            <h1 className="mt-3 text-3xl font-bold text-black">
-              Calendar and appointments
+    <div className="space-y-2">
+      <section className="rounded-lg border border-[#dfe3ea] bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="text-base font-bold text-black sm:text-lg">
+              Calendar
             </h1>
-            <p className="mt-2 max-w-2xl text-base text-[#64748b]">
-              View confirmed upcoming patient visits on your schedule and open
-              slot details before starting a consultation.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <SegmentedControl value={view} onChange={setView} />
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setCalendarMonth((prev) =>
-                    addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
-                  )
-                }
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] transition hover:bg-[#f8fafc]"
-                aria-label="Previous month"
-              >
-                <FiChevronLeft className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={goToToday}
-                className="h-10 rounded-md border border-[#dfe3ea] bg-white px-4 text-sm font-bold text-[#253047] transition hover:bg-[#f8fafc]"
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setCalendarMonth((prev) =>
-                    addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
-                  )
-                }
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] transition hover:bg-[#f8fafc]"
-                aria-label="Next month"
-              >
-                <FiChevronRight className="h-5 w-5" />
-              </button>
+            <div className="flex flex-wrap gap-1.5">
+              <StatPill
+                label="today"
+                value={String(todayAppointments.length)}
+                icon={<FiClock className="h-3.5 w-3.5" />}
+              />
+              <StatPill
+                label="upcoming"
+                value={String(upcomingAppointments.length)}
+                icon={<FiCalendar className="h-3.5 w-3.5" />}
+              />
+              <StatPill
+                label="confirmed"
+                value={String(confirmedCount)}
+                icon={<FiUser className="h-3.5 w-3.5" />}
+              />
             </div>
           </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setCalendarMonth((prev) =>
+                  addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
+                )
+              }
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
+              aria-label="Previous month"
+            >
+              <FiChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={goToToday}
+              className="h-7 rounded-md border border-[#dfe3ea] bg-white px-2.5 text-[11px] font-bold text-[#253047] hover:bg-[#f8fafc]"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCalendarMonth((prev) =>
+                  addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
+                )
+              }
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
+              aria-label="Next month"
+            >
+              <FiChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+          <CalendarViewSearchBar
+            view={view}
+            onViewChange={setView}
+            search={search}
+            onSearchChange={setSearch}
+          />
+          <div className="flex shrink-0 gap-1.5">
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as StatusFilter)
+              }
+              className="h-8 min-w-0 flex-1 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[112px] sm:flex-none"
+            >
+              <option value="all">All statuses</option>
+              {Object.entries(STATUS_META).map(([status, meta]) => (
+                <option key={status} value={status}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={modeFilter}
+              onChange={(event) => setModeFilter(event.target.value as ModeFilter)}
+              className="h-8 min-w-0 flex-1 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[100px] sm:flex-none"
+            >
+              <option value="all">All modes</option>
+              {Object.entries(MODE_META).map(([mode, meta]) => (
+                <option key={mode} value={mode}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
+          <span className="font-bold text-black">
+            {formatDoctorMonthYear(
+              calendarMonth.year,
+              calendarMonth.month,
+              doctorTimezone,
+            )}
+          </span>
+          <span className="text-[#64748b]">
+            {formatDoctorLongDate(selectedDate, doctorTimezone)}
+          </span>
         </div>
 
         {appointmentsQuery.isError ? (
-          <div className="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <div className="flex items-center gap-2">
-              <FiAlertCircle className="h-4 w-4 shrink-0" />
-              Unable to load appointments. Refresh the page to try again.
-            </div>
+          <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">
+            Unable to load appointments. Refresh to try again.
           </div>
         ) : null}
         {appointmentsQuery.isLoading ? (
-          <div className="mt-5 text-sm text-[#64748b]">Loading appointments…</div>
+          <div className="mt-2 text-xs text-[#64748b]">Loading…</div>
         ) : null}
       </section>
-
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-        <StatCard
-          label="Today"
-          value={String(todayAppointments.length)}
-          hint="Booked slots on your schedule"
-          icon={<FiClock className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Upcoming"
-          value={String(upcomingAppointments.length)}
-          hint="Confirmed or active future visits"
-          icon={<FiCalendar className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Confirmed"
-          value={String(confirmedCount)}
-          hint="Upcoming visits approved for your calendar"
-          icon={<FiUser className="h-5 w-5" />}
-        />
-      </div>
-
-      <section className="rounded-md border border-[#dfe3ea] bg-white p-4 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_160px]">
-          <label className="relative block">
-            <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search patient or reason"
-              className="h-11 w-full rounded-md border border-[#dfe3ea] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#8a37ff]"
-            />
-          </label>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-            className="h-11 rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#8a37ff]"
-          >
-            <option value="all">All statuses</option>
-            {Object.entries(STATUS_META).map(([status, meta]) => (
-              <option key={status} value={status}>
-                {meta.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={modeFilter}
-            onChange={(event) => setModeFilter(event.target.value as ModeFilter)}
-            className="h-11 rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#8a37ff]"
-          >
-            <option value="all">All modes</option>
-            {Object.entries(MODE_META).map(([mode, meta]) => (
-              <option key={mode} value={mode}>
-                {meta.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </section>
-
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-black">
-          {formatDoctorMonthYear(
-            calendarMonth.year,
-            calendarMonth.month,
-            doctorTimezone,
-          )}
-        </h2>
-        <div className="text-sm font-semibold text-[#64748b]">
-          Selected: {formatDoctorLongDate(selectedDate, doctorTimezone)}
-        </div>
-      </div>
 
       {view === 'week' ? (
         <WeekStrip
@@ -775,8 +738,8 @@ export function CalendarPage() {
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="space-y-2">
           {view === 'month' ? (
             <MonthCalendar
               visibleYear={calendarMonth.year}

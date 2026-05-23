@@ -1,5 +1,16 @@
 import { DateTime } from 'luxon'
-import { DEFAULT_PROFILE_TIMEZONE } from '../features/doctor-onboarding/constants'
+import {
+  DEFAULT_PROFILE_TIMEZONE,
+  PROFILE_TIMEZONES,
+} from '../features/doctor-onboarding/constants'
+
+/** Human-readable label for profile IANA timezone (e.g. Pacific (America/Los_Angeles)). */
+export function formatDoctorTimezoneLabel(iana: string): string {
+  const trimmed = iana.trim()
+  return (
+    PROFILE_TIMEZONES.find((entry) => entry.value === trimmed)?.label ?? trimmed
+  )
+}
 
 /** Resolve IANA timezone from API/profile fields (doctor_timezone preferred). */
 export function resolveDoctorTimezone(

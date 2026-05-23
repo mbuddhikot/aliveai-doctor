@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
+import { DateTime } from 'luxon'
 import {
   FiAlertCircle,
   FiCalendar,
@@ -14,9 +15,25 @@ import {
   FiVideo,
 } from 'react-icons/fi'
 import {
-  createSampleAppointments,
-  getBookedAppointments,
-} from '../../../features/calendar/api/calendarApi'
+  DOCTOR_APPOINTMENTS_QUERY_KEY,
+  listDoctorAppointments,
+} from '../../../features/appointments/api/appointmentsApi'
+import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
+import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
+import { mapDoctorAppointmentsToCalendar } from '../../../features/calendar/lib/mapDoctorAppointment'
+import { DEFAULT_PROFILE_TIMEZONE } from '../../../features/doctor-onboarding/constants'
+import {
+  addMonthsInZone,
+  calendarMonthDayKeys,
+  dayOfMonthInZone,
+  doctorTodayKey,
+  formatDoctorLongDate,
+  formatDoctorMonthYear,
+  formatWallClockTime,
+  monthOfDateKey,
+  weekdayShortInZone,
+  weekDayKeysAround,
+} from '../../../lib/doctorTimezone'
 import type {
   AppointmentMode,
   AppointmentStatus,
@@ -66,65 +83,20 @@ const MODE_META: Record<AppointmentMode, { label: string; icon: ReactNode }> = {
   home: { label: 'Home visit', icon: <FiMapPin className="h-4 w-4" /> },
 }
 
-function dateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-    2,
-    '0',
-  )}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function addMonths(date: Date, amount: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1)
-}
-
-function addDays(date: Date, amount: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount)
-}
-
-function formatMonth(date: Date): string {
-  return new Intl.DateTimeFormat('en', {
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatLongDate(date: string): string {
-  return new Intl.DateTimeFormat('en', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(`${date}T12:00:00`))
-}
-
-function formatTime(time: string): string {
-  const [hourString, minuteString] = time.split(':')
-  const hour = Number(hourString)
-  const suffix = hour >= 12 ? 'PM' : 'AM'
-  const normalizedHour = hour % 12 || 12
-  return `${normalizedHour}:${minuteString} ${suffix}`
-}
-
 function minutesFromTime(time: string): number {
   const [hours, minutes] = time.split(':').map(Number)
   return hours * 60 + minutes
 }
 
-function getCalendarDays(visibleDate: Date): Date[] {
-  const firstDay = startOfMonth(visibleDate)
-  const start = addDays(firstDay, -firstDay.getDay())
-  return Array.from({ length: 42 }, (_, index) => addDays(start, index))
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return dateKey(a) === dateKey(b)
-}
-
-function isToday(date: Date): boolean {
-  return isSameDay(date, new Date())
+function isUpcomingInDoctorZone(
+  appointment: CalendarAppointment,
+  doctorTimezone: string,
+): boolean {
+  const local = DateTime.fromISO(`${appointment.date}T${appointment.start}`, {
+    zone: doctorTimezone,
+  })
+  if (!local.isValid) return false
+  return local.toUTC().toMillis() >= Date.now() && appointment.status !== 'cancelled'
 }
 
 function sortByTime(appointments: CalendarAppointment[]): CalendarAppointment[] {
@@ -234,20 +206,24 @@ function AppointmentPill({
 }
 
 function MonthCalendar({
-  visibleDate,
+  visibleYear,
+  visibleMonth,
+  doctorTimezone,
   selectedDate,
   appointmentsByDate,
   onSelectDate,
   onSelectAppointment,
 }: {
-  visibleDate: Date
+  visibleYear: number
+  visibleMonth: number
+  doctorTimezone: string
   selectedDate: string
   appointmentsByDate: Map<string, CalendarAppointment[]>
   onSelectDate: (date: string) => void
   onSelectAppointment: (appointment: CalendarAppointment) => void
 }) {
-  const days = getCalendarDays(visibleDate)
-  const currentMonth = visibleDate.getMonth()
+  const days = calendarMonthDayKeys(visibleYear, visibleMonth, doctorTimezone)
+  const todayKey = doctorTodayKey(doctorTimezone)
 
   return (
     <section className="rounded-md border border-[#dfe3ea] bg-white shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
@@ -262,10 +238,9 @@ function MonthCalendar({
         ))}
       </div>
       <div className="grid grid-cols-7">
-        {days.map((day) => {
-          const key = dateKey(day)
+        {days.map((key) => {
           const dayAppointments = sortByTime(appointmentsByDate.get(key) || [])
-          const isMuted = day.getMonth() !== currentMonth
+          const isMuted = monthOfDateKey(key, doctorTimezone) !== visibleMonth
           const isSelected = key === selectedDate
 
           return (
@@ -282,7 +257,7 @@ function MonthCalendar({
                 onClick={() => onSelectDate(key)}
                 className={clsx(
                   'inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold transition',
-                  isToday(day)
+                  key === todayKey
                     ? 'bg-[#8a37ff] text-white'
                     : isSelected
                       ? 'bg-[#f3edff] text-[#8a37ff]'
@@ -291,7 +266,7 @@ function MonthCalendar({
                         : 'text-[#253047] hover:bg-[#f8fafc]',
                 )}
               >
-                {day.getDate()}
+                {dayOfMonthInZone(key, doctorTimezone)}
               </button>
 
               <div className="mt-1 space-y-1">
@@ -356,7 +331,8 @@ function AgendaList({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-bold text-[#111827]">
-                    {formatTime(appointment.start)} - {formatTime(appointment.end)}
+                    {formatWallClockTime(appointment.start)} -{' '}
+                    {formatWallClockTime(appointment.end)}
                   </div>
                   <div className="mt-1 text-base font-bold text-black">
                     {appointment.patientName}
@@ -393,8 +369,10 @@ function AgendaList({
 
 function AppointmentDetails({
   appointment,
+  doctorTimezone,
 }: {
   appointment?: CalendarAppointment
+  doctorTimezone: string
 }) {
   return (
     <section className="rounded-md border border-[#dfe3ea] bg-white shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
@@ -429,10 +407,11 @@ function AppointmentDetails({
                 Date and time
               </div>
               <div className="mt-2 text-base font-bold text-[#111827]">
-                {formatLongDate(appointment.date)}
+                {formatDoctorLongDate(appointment.date, doctorTimezone)}
               </div>
               <div className="mt-1 text-sm text-[#64748b]">
-                {formatTime(appointment.start)} - {formatTime(appointment.end)}
+                {formatWallClockTime(appointment.start)} -{' '}
+                {formatWallClockTime(appointment.end)}
               </div>
             </div>
             <div className="rounded-md bg-[#f8fafc] p-4">
@@ -485,22 +464,21 @@ function AppointmentDetails({
 
 function WeekStrip({
   selectedDate,
+  doctorTimezone,
   appointmentsByDate,
   onSelectDate,
 }: {
   selectedDate: string
+  doctorTimezone: string
   appointmentsByDate: Map<string, CalendarAppointment[]>
   onSelectDate: (date: string) => void
 }) {
-  const selected = new Date(`${selectedDate}T12:00:00`)
-  const start = addDays(selected, -selected.getDay())
-  const days = Array.from({ length: 7 }, (_, index) => addDays(start, index))
+  const days = weekDayKeysAround(selectedDate, doctorTimezone)
 
   return (
     <section className="rounded-md border border-[#dfe3ea] bg-white p-4 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-        {days.map((day) => {
-          const key = dateKey(day)
+        {days.map((key) => {
           const count = appointmentsByDate.get(key)?.length || 0
           return (
             <button
@@ -515,10 +493,10 @@ function WeekStrip({
               )}
             >
               <div className="text-xs font-bold uppercase text-[#64748b]">
-                {WEEKDAYS[day.getDay()]}
+                {weekdayShortInZone(key, doctorTimezone)}
               </div>
               <div className="mt-1 text-2xl font-bold text-black">
-                {day.getDate()}
+                {dayOfMonthInZone(key, doctorTimezone)}
               </div>
               <div className="mt-2 text-xs font-bold text-[#8a37ff]">
                 {count} slots
@@ -531,9 +509,21 @@ function WeekStrip({
   )
 }
 
+function initialCalendarMonth(timezone: string) {
+  const now = DateTime.now().setZone(timezone)
+  return { year: now.year, month: now.month }
+}
+
 export function CalendarPage() {
-  const [visibleDate, setVisibleDate] = useState(() => new Date())
-  const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()))
+  const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
+    useDoctorId()
+  const { doctorTimezone } = useDoctorTimezone()
+  const [calendarMonth, setCalendarMonth] = useState(() =>
+    initialCalendarMonth(DEFAULT_PROFILE_TIMEZONE),
+  )
+  const [selectedDate, setSelectedDate] = useState(() =>
+    doctorTodayKey(DEFAULT_PROFILE_TIMEZONE),
+  )
   const [view, setView] = useState<CalendarView>('month')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -541,15 +531,19 @@ export function CalendarPage() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>()
 
   const appointmentsQuery = useQuery({
-    queryKey: ['doctor-booked-appointments'],
-    queryFn: getBookedAppointments,
-    retry: false,
+    queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
+    queryFn: () => listDoctorAppointments({ doctorId: doctorId! }),
+    enabled: Boolean(doctorId),
   })
 
-  const sourceAppointments =
-    appointmentsQuery.data && appointmentsQuery.data.length > 0
-      ? appointmentsQuery.data
-      : createSampleAppointments(visibleDate)
+  const sourceAppointments = useMemo(
+    () =>
+      mapDoctorAppointmentsToCalendar(
+        appointmentsQuery.data?.data ?? [],
+        doctorTimezone,
+      ),
+    [appointmentsQuery.data?.data, doctorTimezone],
+  )
 
   const appointments = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -581,22 +575,19 @@ export function CalendarPage() {
     appointments.find((item) => item.id === selectedAppointmentId) ||
     selectedDayAppointments[0]
 
+  const todayKey = doctorTodayKey(doctorTimezone)
   const todayAppointments = appointments.filter(
-    (appointment) => appointment.date === dateKey(new Date()),
+    (appointment) => appointment.date === todayKey,
   )
-  const upcomingAppointments = appointments.filter(
-    (appointment) =>
-      new Date(`${appointment.date}T${appointment.start}`) >= new Date() &&
-      appointment.status !== 'cancelled',
+  const upcomingAppointments = appointments.filter((appointment) =>
+    isUpcomingInDoctorZone(appointment, doctorTimezone),
   )
-  const completedCount = appointments.filter(
-    (appointment) => appointment.status === 'completed',
-  ).length
+  const confirmedCount = appointments.length
 
   const goToToday = () => {
-    const today = new Date()
-    setVisibleDate(today)
-    setSelectedDate(dateKey(today))
+    const todayKeyValue = doctorTodayKey(doctorTimezone)
+    setCalendarMonth(initialCalendarMonth(doctorTimezone))
+    setSelectedDate(todayKeyValue)
     setSelectedAppointmentId(undefined)
   }
 
@@ -608,6 +599,29 @@ export function CalendarPage() {
   const selectAppointment = (appointment: CalendarAppointment) => {
     setSelectedDate(appointment.date)
     setSelectedAppointmentId(appointment.id)
+  }
+
+  if (doctorIdLoading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-[#64748b]">
+        Loading your profile…
+      </div>
+    )
+  }
+
+  if (doctorIdError || !doctorId) {
+    return (
+      <section className="rounded-[12px] border border-amber-200 bg-amber-50 p-8 text-center">
+        <FiAlertCircle className="mx-auto h-10 w-10 text-amber-700" />
+        <h2 className="mt-4 text-xl font-bold text-black">
+          Complete your doctor profile first
+        </h2>
+        <p className="mt-2 text-sm text-amber-900">
+          Your calendar shows confirmed upcoming visits after onboarding is
+          complete.
+        </p>
+      </section>
+    )
   }
 
   return (
@@ -623,8 +637,8 @@ export function CalendarPage() {
               Calendar and appointments
             </h1>
             <p className="mt-2 max-w-2xl text-base text-[#64748b]">
-              Track booked patient slots, monitor visit status, and open the
-              details you need before starting a consultation.
+              View confirmed upcoming patient visits on your schedule and open
+              slot details before starting a consultation.
             </p>
           </div>
 
@@ -633,7 +647,11 @@ export function CalendarPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setVisibleDate(addMonths(visibleDate, -1))}
+                onClick={() =>
+                  setCalendarMonth((prev) =>
+                    addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
+                  )
+                }
                 className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] transition hover:bg-[#f8fafc]"
                 aria-label="Previous month"
               >
@@ -648,7 +666,11 @@ export function CalendarPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setVisibleDate(addMonths(visibleDate, 1))}
+                onClick={() =>
+                  setCalendarMonth((prev) =>
+                    addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
+                  )
+                }
                 className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] transition hover:bg-[#f8fafc]"
                 aria-label="Next month"
               >
@@ -658,13 +680,16 @@ export function CalendarPage() {
           </div>
         </div>
 
-        {appointmentsQuery.error ? (
-          <div className="mt-5 rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-4 py-3 text-sm text-[#64748b]">
+        {appointmentsQuery.isError ? (
+          <div className="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             <div className="flex items-center gap-2">
-              <FiAlertCircle className="h-4 w-4" />
-              Appointment API is unavailable, so sample booked slots are shown.
+              <FiAlertCircle className="h-4 w-4 shrink-0" />
+              Unable to load appointments. Refresh the page to try again.
             </div>
           </div>
+        ) : null}
+        {appointmentsQuery.isLoading ? (
+          <div className="mt-5 text-sm text-[#64748b]">Loading appointments…</div>
         ) : null}
       </section>
 
@@ -682,9 +707,9 @@ export function CalendarPage() {
           icon={<FiCalendar className="h-5 w-5" />}
         />
         <StatCard
-          label="Completed"
-          value={String(completedCount)}
-          hint="Finished appointments in this view"
+          label="Confirmed"
+          value={String(confirmedCount)}
+          hint="Upcoming visits approved for your calendar"
           icon={<FiUser className="h-5 w-5" />}
         />
       </div>
@@ -729,15 +754,22 @@ export function CalendarPage() {
       </section>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-black">{formatMonth(visibleDate)}</h2>
+        <h2 className="text-2xl font-bold text-black">
+          {formatDoctorMonthYear(
+            calendarMonth.year,
+            calendarMonth.month,
+            doctorTimezone,
+          )}
+        </h2>
         <div className="text-sm font-semibold text-[#64748b]">
-          Selected: {formatLongDate(selectedDate)}
+          Selected: {formatDoctorLongDate(selectedDate, doctorTimezone)}
         </div>
       </div>
 
       {view === 'week' ? (
         <WeekStrip
           selectedDate={selectedDate}
+          doctorTimezone={doctorTimezone}
           appointmentsByDate={appointmentsByDate}
           onSelectDate={selectDate}
         />
@@ -747,7 +779,9 @@ export function CalendarPage() {
         <div className="space-y-5">
           {view === 'month' ? (
             <MonthCalendar
-              visibleDate={visibleDate}
+              visibleYear={calendarMonth.year}
+              visibleMonth={calendarMonth.month}
+              doctorTimezone={doctorTimezone}
               selectedDate={selectedDate}
               appointmentsByDate={appointmentsByDate}
               onSelectDate={selectDate}
@@ -763,7 +797,10 @@ export function CalendarPage() {
           />
         </div>
 
-        <AppointmentDetails appointment={selectedAppointment} />
+        <AppointmentDetails
+          appointment={selectedAppointment}
+          doctorTimezone={doctorTimezone}
+        />
       </div>
     </div>
   )

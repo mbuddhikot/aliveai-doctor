@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
   FiAlertCircle,
@@ -14,12 +14,14 @@ import {
   FiTrash2,
   FiVideo,
 } from 'react-icons/fi'
+import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
+import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import {
   createDefaultAvailability,
+  DOCTOR_AVAILABILITY_QUERY_KEY,
   getDoctorAvailability,
   readAvailabilityDraft,
   saveDoctorAvailability,
-  writeAvailabilityDraft,
 } from '../../../features/availability/api/availabilityApi'
 import type {
   AvailabilityException,
@@ -495,26 +497,32 @@ function SummaryList({ availability }: { availability: DoctorAvailability }) {
 }
 
 export function AvailabilityPage() {
+  const queryClient = useQueryClient()
+  const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
+    useDoctorId()
+  const { doctorTimezone: profileTimezone } = useDoctorTimezone()
   const draft = useMemo(() => readAvailabilityDraft(), [])
   const [localAvailability, setLocalAvailability] =
     useState<DoctorAvailability | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
   const availabilityQuery = useQuery({
-    queryKey: ['doctor-availability'],
-    queryFn: getDoctorAvailability,
+    queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId],
+    queryFn: () => getDoctorAvailability(doctorId!),
+    enabled: Boolean(doctorId),
     retry: false,
   })
 
   const saveMutation = useMutation({
-    mutationFn: saveDoctorAvailability,
+    mutationFn: (payload: DoctorAvailability) =>
+      saveDoctorAvailability(doctorId!, payload),
   })
 
   const availability =
     localAvailability ||
     availabilityQuery.data ||
     draft ||
-    createDefaultAvailability()
+    createDefaultAvailability(profileTimezone)
 
   const validationMessages = useMemo(
     () => validateAvailability(availability),
@@ -581,19 +589,42 @@ export function AvailabilityPage() {
     try {
       const saved = await saveMutation.mutateAsync(availability)
       setLocalAvailability(saved)
-      setSaveMessage('Availability saved successfully.')
+      void queryClient.invalidateQueries({
+        queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId],
+      })
+      setSaveMessage('Availability saved successfully. Patients can book these times.')
     } catch (err) {
       const message =
-        err instanceof Error
-          ? err.message
-          : 'Saved locally. The API did not accept availability yet.'
-      writeAvailabilityDraft(availability)
+        err instanceof Error ? err.message : 'Unable to save availability.'
       setSaveMessage(message)
     }
   }
 
   const resetToDefault = () => {
-    updateAvailability(createDefaultAvailability())
+    updateAvailability(createDefaultAvailability(profileTimezone))
+  }
+
+  if (doctorIdLoading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-[#64748b]">
+        Loading your profile…
+      </div>
+    )
+  }
+
+  if (doctorIdError || !doctorId) {
+    return (
+      <section className="rounded-[12px] border border-amber-200 bg-amber-50 p-8 text-center">
+        <FiAlertCircle className="mx-auto h-10 w-10 text-amber-700" />
+        <h2 className="mt-4 text-xl font-bold text-black">
+          Complete your doctor profile first
+        </h2>
+        <p className="mt-2 text-sm text-amber-900">
+          Availability is linked to your verified doctor profile. Finish
+          onboarding to set bookable hours.
+        </p>
+      </section>
+    )
   }
 
   return (
@@ -654,9 +685,11 @@ export function AvailabilityPage() {
               )}
                 <div>
                 {saveMessage ||
-                  (availabilityQuery.error && draft
-                    ? 'Using your saved local draft because the API is unavailable.'
-                    : 'Availability API is not reachable right now.')}
+                  (availabilityQuery.error
+                    ? draft
+                      ? 'Could not load availability from the server. Showing your last saved draft on this device.'
+                      : 'Could not load availability from the server.'
+                    : null)}
                 {hasValidationErrors ? (
                   <ul className="mt-2 list-inside list-disc space-y-1">
                     {validationMessages.map((message) => (

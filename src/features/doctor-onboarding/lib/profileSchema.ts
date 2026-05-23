@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import type { Country } from '../../../lib/countries'
 import { formatPhoneWithDialCode } from '../../../lib/phone'
+import { DEFAULT_PROFILE_TIMEZONE } from '../constants'
+import type { DoctorProfileCreatePayload } from '../types'
 
-/** Matches DoctorProfileCreateRequest / DoctorProfileUpdateRequest in the backend OpenAPI spec. */
+/** Matches DoctorProfileCreateRequest in the backend OpenAPI spec. */
 export const doctorProfileSchema = z.object({
   full_name: z
     .string()
@@ -42,6 +44,11 @@ export const doctorProfileSchema = z.object({
     .min(5, 'Session must be at least 5 minutes')
     .max(480, 'Session cannot exceed 480 minutes')
     .default(30),
+  timezone: z
+    .string()
+    .trim()
+    .min(1, 'Select your timezone')
+    .default(DEFAULT_PROFILE_TIMEZONE),
 })
 
 export type DoctorProfileFormValues = z.infer<typeof doctorProfileSchema>
@@ -49,7 +56,7 @@ export type DoctorProfileFormValues = z.infer<typeof doctorProfileSchema>
 export function profileFormToPayload(
   values: DoctorProfileFormValues,
   country: Country,
-) {
+): DoctorProfileCreatePayload {
   const qualifications = values.qualifications
     .split(',')
     .map((item) => item.trim())
@@ -70,5 +77,6 @@ export function profileFormToPayload(
     fee_amount: values.fee_amount ?? null,
     fee_currency: values.fee_currency.trim() || 'USD',
     session_minutes: values.session_minutes,
+    timezone: values.timezone.trim() || DEFAULT_PROFILE_TIMEZONE,
   }
 }

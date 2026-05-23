@@ -33,12 +33,14 @@ import {
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { filterAppointments, sortAppointments } from '../../../features/appointments/lib/filters'
 import {
+  appointmentDoctorTimezone,
   formatAppointmentDate,
   formatAppointmentDateTime,
   formatAppointmentTimeRange,
   formatFee,
   isAppointmentUpcoming,
 } from '../../../features/appointments/lib/format'
+import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import type { DoctorAppointment } from '../../../features/appointments/types'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
 
@@ -75,13 +77,16 @@ function StatPill({
 
 function AppointmentListItem({
   appointment,
+  profileTimezone,
   isSelected,
   onSelect,
 }: {
   appointment: DoctorAppointment
+  profileTimezone: string
   isSelected: boolean
   onSelect: () => void
 }) {
+  const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
   const fee = formatFee(appointment.fee_amount, appointment.fee_currency)
   const needsAction = appointment.workflow_status === 'pending'
 
@@ -110,7 +115,7 @@ function AppointmentListItem({
           )}
           <p className="mt-1 flex items-center gap-1.5 text-sm text-[#64748b]">
             <FiCalendar className="h-4 w-4 shrink-0" />
-            {formatAppointmentDateTime(appointment.starts_at)}
+            {formatAppointmentDateTime(appointment.starts_at, doctorTimezone)}
           </p>
         </div>
         {needsAction && (
@@ -132,17 +137,20 @@ function AppointmentListItem({
 
 function AppointmentDetailPanel({
   appointment,
+  profileTimezone,
   onApprove,
   onReject,
   onReschedule,
   onJoin,
 }: {
   appointment: DoctorAppointment
+  profileTimezone: string
   onApprove: () => void
   onReject: () => void
   onReschedule: () => void
   onJoin: () => void
 }) {
+  const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
   const fee = formatFee(appointment.fee_amount, appointment.fee_currency)
   const isPending = appointment.workflow_status === 'pending'
   const isRejected = appointment.workflow_status === 'reject'
@@ -223,7 +231,7 @@ function AppointmentDetailPanel({
           <DetailRow
             icon={<FiCalendar className="h-4 w-4" />}
             label="Date"
-            value={formatAppointmentDate(appointment.starts_at)}
+            value={formatAppointmentDate(appointment.starts_at, doctorTimezone)}
           />
           <DetailRow
             icon={<FiClock className="h-4 w-4" />}
@@ -231,6 +239,7 @@ function AppointmentDetailPanel({
             value={formatAppointmentTimeRange(
               appointment.starts_at,
               appointment.ends_at,
+              doctorTimezone,
             )}
           />
           <DetailRow
@@ -297,6 +306,7 @@ export function MyAppointmentsPage() {
   const queryClient = useQueryClient()
   const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
     useDoctorId()
+  const { doctorTimezone: profileTimezone } = useDoctorTimezone()
 
   const [activeTab, setActiveTab] = useState<AppointmentFilterTab>('all')
   const [search, setSearch] = useState('')
@@ -524,6 +534,7 @@ export function MyAppointmentsPage() {
                   <AppointmentListItem
                     key={appointment.id}
                     appointment={appointment}
+                    profileTimezone={profileTimezone}
                     isSelected={selectedAppointment?.id === appointment.id}
                     onSelect={() => setSelectedId(appointment.id)}
                   />
@@ -542,6 +553,7 @@ export function MyAppointmentsPage() {
           {selectedAppointment ? (
             <AppointmentDetailPanel
               appointment={selectedAppointment}
+              profileTimezone={profileTimezone}
               onApprove={() => openModal('approve')}
               onReject={() => openModal('reject')}
               onReschedule={() => openModal('reschedule')}
@@ -576,6 +588,7 @@ export function MyAppointmentsPage() {
       {modalAction === 'reschedule' && selectedAppointment && (
         <RescheduleAppointmentModal
           appointment={selectedAppointment}
+          profileTimezone={profileTimezone}
           isSubmitting={rescheduleMutation.isPending}
           error={actionError}
           onClose={() => setModalAction(null)}

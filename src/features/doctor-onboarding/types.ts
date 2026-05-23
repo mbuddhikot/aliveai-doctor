@@ -18,7 +18,8 @@ export type DoctorDocumentType =
   | 'license'
   | 'other'
 
-export type DoctorProfilePayload = {
+/** POST /v1/doctor/profile — DoctorProfileCreateRequest */
+export type DoctorProfileCreatePayload = {
   full_name: string
   specialty: string
   qualifications: string[]
@@ -29,19 +30,37 @@ export type DoctorProfilePayload = {
   fee_amount?: number | null
   fee_currency?: string | null
   session_minutes?: number | null
+  timezone?: string | null
 }
 
-export type DoctorProfile = Omit<DoctorProfilePayload, 'specialty'> & {
-  specialty: string | null
+/** PUT /v1/doctor/profile — DoctorProfileUpdateRequest (partial) */
+export type DoctorProfileUpdatePayload = Partial<DoctorProfileCreatePayload>
+
+/** @deprecated Use DoctorProfileCreatePayload */
+export type DoctorProfilePayload = DoctorProfileCreatePayload
+
+/** GET/POST/PUT response — DoctorProfileResponse */
+export type DoctorProfile = {
   id: string
-  user_id: string
+  user_id: string | null
+  full_name: string
+  specialty: string | null
+  qualifications: string[] | null
+  registration_number: string | null
+  phone: string | null
+  years_experience: number | null
+  bio: string | null
+  fee_amount: number | null
+  fee_currency: string | null
+  session_minutes: number
+  timezone: string
   verification_status: DoctorVerificationStatus
   is_active: boolean
-  profile_completed_at?: string | null
-  verified_at?: string | null
-  rejection_reason?: string | null
-  created_at?: string
-  updated_at?: string
+  profile_completed_at: string | null
+  verified_at: string | null
+  rejection_reason: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type DoctorDocument = {

@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import type { DoctorAppointment } from '../types'
-import { isoToDateInput, isoToTimeInput } from '../lib/format'
+import {
+  appointmentDoctorTimezone,
+  isoToDateInput,
+  isoToTimeInput,
+} from '../lib/format'
 import { AppointmentModal } from './AppointmentModal'
 
 type RescheduleAppointmentModalProps = {
   appointment: DoctorAppointment
+  profileTimezone: string
   isSubmitting: boolean
   error?: string | null
   onClose: () => void
@@ -17,13 +22,19 @@ type RescheduleAppointmentModalProps = {
 
 export function RescheduleAppointmentModal({
   appointment,
+  profileTimezone,
   isSubmitting,
   error,
   onClose,
   onConfirm,
 }: RescheduleAppointmentModalProps) {
-  const [date, setDate] = useState(isoToDateInput(appointment.starts_at))
-  const [time, setTime] = useState(isoToTimeInput(appointment.starts_at))
+  const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
+  const [date, setDate] = useState(() =>
+    isoToDateInput(appointment.starts_at, doctorTimezone),
+  )
+  const [time, setTime] = useState(() =>
+    isoToTimeInput(appointment.starts_at, doctorTimezone),
+  )
   const [duration, setDuration] = useState(
     String(appointment.duration_minutes || 30),
   )

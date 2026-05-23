@@ -1,36 +1,48 @@
-export function formatAppointmentDateTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return new Intl.DateTimeFormat('en', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
+import {
+  doctorDateKeyFromUtc,
+  doctorTimeFromUtc,
+  resolveDoctorTimezone,
+  utcIsoToDoctorLocal,
+} from '../../../lib/doctorTimezone'
+
+export function appointmentDoctorTimezone(
+  appointment: { doctor_timezone?: string | null },
+  fallbackTimezone: string,
+): string {
+  return resolveDoctorTimezone(
+    appointment.doctor_timezone,
+    fallbackTimezone,
+  )
 }
 
-export function formatAppointmentDate(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return new Intl.DateTimeFormat('en', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
+export function formatAppointmentDateTime(
+  iso: string,
+  doctorTimezone: string,
+): string {
+  const local = utcIsoToDoctorLocal(iso, doctorTimezone)
+  if (!local) return iso
+  return local.toFormat('ccc, LLL d, h:mm a')
 }
 
-export function formatAppointmentTimeRange(startsAt: string, endsAt: string): string {
-  const start = new Date(startsAt)
-  const end = new Date(endsAt)
-  if (Number.isNaN(start.getTime())) return ''
-  const timeFmt = new Intl.DateTimeFormat('en', {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-  if (Number.isNaN(end.getTime())) return timeFmt.format(start)
-  return `${timeFmt.format(start)} – ${timeFmt.format(end)}`
+export function formatAppointmentDate(
+  iso: string,
+  doctorTimezone: string,
+): string {
+  const local = utcIsoToDoctorLocal(iso, doctorTimezone)
+  if (!local) return iso
+  return local.toFormat('cccc, LLLL d, yyyy')
+}
+
+export function formatAppointmentTimeRange(
+  startsAt: string,
+  endsAt: string,
+  doctorTimezone: string,
+): string {
+  const start = utcIsoToDoctorLocal(startsAt, doctorTimezone)
+  const end = utcIsoToDoctorLocal(endsAt, doctorTimezone)
+  if (!start) return ''
+  if (!end) return start.toFormat('h:mm a')
+  return `${start.toFormat('h:mm a')} – ${end.toFormat('h:mm a')}`
 }
 
 export function formatFee(amount?: number | null, currency?: string | null): string | null {
@@ -47,21 +59,14 @@ export function formatFee(amount?: number | null, currency?: string | null): str
   }
 }
 
-export function isoToDateInput(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+/** Doctor-local yyyy-MM-dd for date inputs (from UTC starts_at). */
+export function isoToDateInput(iso: string, doctorTimezone: string): string {
+  return doctorDateKeyFromUtc(iso, doctorTimezone)
 }
 
-export function isoToTimeInput(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const h = String(date.getHours()).padStart(2, '0')
-  const m = String(date.getMinutes()).padStart(2, '0')
-  return `${h}:${m}`
+/** Doctor-local HH:mm for time inputs (from UTC starts_at). */
+export function isoToTimeInput(iso: string, doctorTimezone: string): string {
+  return doctorTimeFromUtc(iso, doctorTimezone)
 }
 
 export function isAppointmentUpcoming(appointment: {
@@ -71,5 +76,7 @@ export function isAppointmentUpcoming(appointment: {
   if (appointment.status === 'cancelled' || appointment.status === 'past') {
     return false
   }
-  return new Date(appointment.starts_at).getTime() >= Date.now()
+  const startsMs = Date.parse(appointment.starts_at)
+  if (Number.isNaN(startsMs)) return false
+  return startsMs >= Date.now()
 }

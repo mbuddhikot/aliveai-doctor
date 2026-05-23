@@ -42,6 +42,19 @@ type ApiErrorBody = {
 export function extractApiErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
     const axErr = err as AxiosError<ApiErrorBody>
+    const status = axErr.response?.status
+
+    if (!axErr.response) {
+      if (axErr.code === 'ECONNABORTED') {
+        return 'Request timed out. Check your connection and try again.'
+      }
+      return 'Cannot reach the API server. It may be down, starting up, or blocked by the network. Try again in a minute.'
+    }
+
+    if (status === 503 || status === 502 || status === 504) {
+      return 'The API server is temporarily unavailable. Please try again in a minute.'
+    }
+
     const body = axErr.response?.data
 
     if (body) {

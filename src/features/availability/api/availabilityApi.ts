@@ -181,15 +181,26 @@ export function writeAvailabilityDraft(availability: DoctorAvailability): void {
 
 export async function getDoctorAvailability(
   doctorId: string,
+  profileTimezone?: string,
 ): Promise<DoctorAvailability> {
   try {
     const { data } = await apiClient.get<unknown>(
       `/v1/doctors/${doctorId}/availability`,
     )
     const response = parseApiResponse(data)
-    const availability = availabilityFromApiResponse(response)
-    writeAvailabilityDraft(availability)
-    return availability
+    const availability = availabilityFromApiResponse(
+      response,
+      createDefaultAvailability(profileTimezone),
+    )
+    const withProfileTimezone: DoctorAvailability = {
+      ...availability,
+      timezone:
+        profileTimezone?.trim() ||
+        availability.timezone ||
+        DEFAULT_PROFILE_TIMEZONE,
+    }
+    writeAvailabilityDraft(withProfileTimezone)
+    return withProfileTimezone
   } catch (err) {
     throw new Error(
       extractApiErrorMessage(err, 'Unable to load availability from the API'),
@@ -216,8 +227,12 @@ export async function saveDoctorAvailability(
     )
     const response = parseApiResponse(data)
     const saved = availabilityFromApiResponse(response, availability)
-    writeAvailabilityDraft(saved)
-    return saved
+    const withProfileTimezone: DoctorAvailability = {
+      ...saved,
+      timezone: availability.timezone,
+    }
+    writeAvailabilityDraft(withProfileTimezone)
+    return withProfileTimezone
   } catch (err) {
     throw new Error(
       extractApiErrorMessage(err, 'Unable to save availability'),

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
@@ -16,6 +17,7 @@ import {
 } from 'react-icons/fi'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
+import { formatDoctorTimezoneLabel } from '../../../lib/doctorTimezone'
 import {
   createDefaultAvailability,
   DOCTOR_AVAILABILITY_QUERY_KEY,
@@ -32,10 +34,17 @@ import type {
   WeekdayId,
 } from '../../../features/availability/types'
 
-const MODE_LABELS: Record<ConsultationMode, string> = {
+const AVAILABILITY_VISIT_MODES = ['video', 'clinic'] as const satisfies readonly ConsultationMode[]
+
+const MODE_LABELS: Record<(typeof AVAILABILITY_VISIT_MODES)[number], string> = {
   video: 'Video',
   clinic: 'Clinic',
-  home: 'Home visit',
+}
+
+function normalizeSlotModes(modes: ConsultationMode[]): ConsultationMode[] {
+  const allowed = new Set<ConsultationMode>(AVAILABILITY_VISIT_MODES)
+  const filtered = modes.filter((mode) => allowed.has(mode))
+  return filtered.length > 0 ? filtered : ['video']
 }
 
 const SLOT_DURATIONS = [15, 20, 30, 45, 60]
@@ -162,19 +171,19 @@ function StatCard({
   icon: ReactNode
 }) {
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white p-5 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-[#64748b]">{label}</p>
-          <div className="mt-2 text-3xl font-bold leading-none text-black">
-            {value}
-          </div>
-        </div>
-        <span className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#f3edff] text-[#8a37ff]">
+    <section className="rounded-lg border border-[#dfe3ea] bg-white px-3 py-2.5 shadow-sm">
+      <div className="flex items-center gap-2.5">
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#f3edff] text-[#8a37ff]">
           {icon}
         </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
+            {label}
+          </p>
+          <div className="text-xl font-bold leading-tight text-black">{value}</div>
+          <p className="truncate text-xs text-[#64748b]">{hint}</p>
+        </div>
       </div>
-      <p className="mt-3 text-sm text-[#64748b]">{hint}</p>
     </section>
   )
 }
@@ -191,15 +200,17 @@ function Panel({
   action?: ReactNode
 }) {
   return (
-    <section className="rounded-md border border-[#dfe3ea] bg-white shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-      <div className="flex flex-col gap-3 border-b border-[#edf0f4] px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-black">{title}</h2>
-          {subtitle ? <p className="mt-1 text-sm text-[#64748b]">{subtitle}</p> : null}
+    <section className="rounded-lg border border-[#dfe3ea] bg-white shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-[#edf0f4] px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-black">{title}</h2>
+          {subtitle ? (
+            <p className="mt-0.5 text-xs text-[#64748b]">{subtitle}</p>
+          ) : null}
         </div>
         {action}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4">{children}</div>
     </section>
   )
 }
@@ -219,11 +230,11 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-[#253047]">{label}</span>
+      <span className="text-xs font-medium text-[#253047]">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="mt-2 h-11 w-full rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-semibold text-[#111827] outline-none transition focus:border-[#8a37ff]"
+        className="mt-1 h-9 w-full rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-semibold text-[#111827] outline-none transition focus:border-[#8a37ff]"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -240,7 +251,7 @@ function ModeToggle({
   checked,
   onToggle,
 }: {
-  mode: ConsultationMode
+  mode: (typeof AVAILABILITY_VISIT_MODES)[number]
   checked: boolean
   onToggle: () => void
 }) {
@@ -271,14 +282,16 @@ function SlotEditor({
   onChange: (slot: AvailabilitySlot) => void
   onRemove: () => void
 }) {
-  const toggleMode = (mode: ConsultationMode) => {
-    const modes = slot.modes.includes(mode)
-      ? slot.modes.filter((item) => item !== mode)
-      : [...slot.modes, mode]
+  const activeModes = normalizeSlotModes(slot.modes)
+
+  const toggleMode = (mode: (typeof AVAILABILITY_VISIT_MODES)[number]) => {
+    const modes = activeModes.includes(mode)
+      ? activeModes.filter((item) => item !== mode)
+      : [...activeModes, mode]
 
     onChange({
       ...slot,
-      modes: modes.length > 0 ? modes : ['video'],
+      modes: normalizeSlotModes(modes),
     })
   }
 
@@ -310,11 +323,11 @@ function SlotEditor({
       <div>
         <div className="text-xs font-semibold text-[#64748b]">Visit type</div>
         <div className="mt-1 flex flex-wrap gap-2">
-          {(['video', 'clinic', 'home'] as ConsultationMode[]).map((mode) => (
+          {AVAILABILITY_VISIT_MODES.map((mode) => (
             <ModeToggle
               key={mode}
               mode={mode}
-              checked={slot.modes.includes(mode)}
+              checked={activeModes.includes(mode)}
               onToggle={() => toggleMode(mode)}
             />
           ))}
@@ -480,7 +493,9 @@ function SummaryList({ availability }: { availability: DoctorAvailability }) {
                     {formatTime(slot.start)} - {formatTime(slot.end)}
                   </span>
                   <span className="text-[#64748b]">
-                    {slot.modes.map((mode) => MODE_LABELS[mode]).join(', ')}
+                    {normalizeSlotModes(slot.modes)
+                      .map((mode) => MODE_LABELS[mode])
+                      .join(', ')}
                   </span>
                 </div>
               ))}
@@ -507,8 +522,8 @@ export function AvailabilityPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
   const availabilityQuery = useQuery({
-    queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId],
-    queryFn: () => getDoctorAvailability(doctorId!),
+    queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId, profileTimezone],
+    queryFn: () => getDoctorAvailability(doctorId!, profileTimezone),
     enabled: Boolean(doctorId),
     retry: false,
   })
@@ -518,11 +533,26 @@ export function AvailabilityPage() {
       saveDoctorAvailability(doctorId!, payload),
   })
 
-  const availability =
+  const availabilitySource =
     localAvailability ||
     availabilityQuery.data ||
     draft ||
     createDefaultAvailability(profileTimezone)
+
+  const availability = useMemo(
+    () => ({
+      ...availabilitySource,
+      timezone: profileTimezone,
+      weekly: availabilitySource.weekly.map((day) => ({
+        ...day,
+        slots: day.slots.map((slot) => ({
+          ...slot,
+          modes: normalizeSlotModes(slot.modes),
+        })),
+      })),
+    }),
+    [availabilitySource, profileTimezone],
+  )
 
   const validationMessages = useMemo(
     () => validateAvailability(availability),
@@ -628,40 +658,41 @@ export function AvailabilityPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-md border border-[#dfe3ea] bg-white px-5 py-5 shadow-[0_12px_30px_rgba(31,41,55,0.04)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#f3edff] px-3 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[#8a37ff]">
-              <FiCalendar className="h-4 w-4" />
-              Doctor availability
+    <div className="space-y-3">
+      <section className="rounded-lg border border-[#dfe3ea] bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3edff] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a37ff]">
+                <FiCalendar className="h-3 w-3" />
+                Doctor availability
+              </span>
+              <h1 className="text-lg font-bold text-black sm:text-xl">
+                Manage bookable hours
+              </h1>
             </div>
-            <h1 className="mt-3 text-3xl font-bold text-black">
-              Manage bookable hours
-            </h1>
-            <p className="mt-2 max-w-2xl text-base text-[#64748b]">
-              Set recurring weekly slots, visit modes, buffers, and planned days
-              off so patients only book times that actually work for you.
+            <p className="mt-1 text-xs leading-snug text-[#64748b] sm:max-w-xl">
+              Weekly slots, visit modes, buffers, and days off for patient booking.
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex shrink-0 gap-2">
             <button
               type="button"
               onClick={resetToDefault}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#dfe3ea] bg-white px-4 text-sm font-bold text-[#253047] transition hover:bg-[#f8fafc]"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:bg-[#f8fafc]"
             >
-              <FiRefreshCw className="h-4 w-4" />
+              <FiRefreshCw className="h-3.5 w-3.5" />
               Reset
             </button>
             <button
               type="button"
               onClick={saveAvailability}
               disabled={saveMutation.isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#8a37ff] px-5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(138,55,255,0.2)] transition hover:bg-[#772cf0] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#8a37ff] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#772cf0] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <FiSave className="h-4 w-4" />
-              {saveMutation.isPending ? 'Saving...' : 'Save availability'}
+              <FiSave className="h-3.5 w-3.5" />
+              {saveMutation.isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
@@ -669,7 +700,7 @@ export function AvailabilityPage() {
         {(availabilityQuery.error || saveMessage || hasValidationErrors) && (
           <div
             className={clsx(
-              'mt-5 rounded-md border px-4 py-3 text-sm',
+              'mt-3 rounded-md border px-3 py-2 text-xs',
               hasValidationErrors
                 ? 'border-amber-200 bg-amber-50 text-amber-800'
                 : saveMessage?.includes('successfully')
@@ -703,29 +734,29 @@ export function AvailabilityPage() {
         )}
       </section>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <StatCard
           label="Active days"
           value={`${activeDays}/7`}
-          hint="Days open for patient bookings"
-          icon={<FiCalendar className="h-5 w-5" />}
+          hint="Open for bookings"
+          icon={<FiCalendar className="h-4 w-4" />}
         />
         <StatCard
           label="Weekly hours"
           value={`${weeklyHours}h`}
-          hint={`${weeklySlots} bookable blocks configured`}
-          icon={<FiClock className="h-5 w-5" />}
+          hint={`${weeklySlots} blocks`}
+          icon={<FiClock className="h-4 w-4" />}
         />
         <StatCard
           label="Default mode"
           value="Mixed"
-          hint="Video, clinic, and home visit slots supported"
-          icon={<FiVideo className="h-5 w-5" />}
+          hint="Video & clinic"
+          icon={<FiVideo className="h-4 w-4" />}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-3">
           <Panel
             title="Weekly schedule"
             subtitle={
@@ -804,26 +835,29 @@ export function AvailabilityPage() {
           </Panel>
         </div>
 
-        <aside className="space-y-5">
+        <aside className="space-y-3">
           <Panel
             title="Booking rules"
             subtitle="These defaults keep appointments spaced and predictable."
           >
-            <div className="space-y-4">
-              <label className="block">
-                <span className="text-sm font-medium text-[#253047]">Timezone</span>
-                <input
-                  type="text"
-                  value={availability.timezone}
-                  onChange={(event) =>
-                    updateAvailability({
-                      ...availability,
-                      timezone: event.target.value,
-                    })
-                  }
-                  className="mt-2 h-11 w-full rounded-md border border-[#dfe3ea] px-3 text-sm font-semibold text-[#111827] outline-none focus:border-[#8a37ff]"
-                />
-              </label>
+            <div className="space-y-3">
+              <div className="rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-3 py-2">
+                <span className="text-xs font-medium text-[#253047]">Timezone</span>
+                <p className="mt-0.5 text-sm font-bold text-[#111827]">
+                  {formatDoctorTimezoneLabel(profileTimezone)}
+                </p>
+                <p className="mt-1 text-[11px] leading-snug text-[#64748b]">
+                  Weekly slots and patient booking use your profile timezone (
+                  <span className="font-mono text-[10px]">{profileTimezone}</span>
+                  ).{' '}
+                  <Link
+                    to="/dashboard/profile"
+                    className="font-semibold text-[#8a37ff] hover:underline"
+                  >
+                    Change in Profile
+                  </Link>
+                </p>
+              </div>
               <SelectField
                 label="Slot duration"
                 value={availability.slotDurationMinutes}

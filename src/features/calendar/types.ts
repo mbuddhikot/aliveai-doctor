@@ -18,4 +18,5 @@ export type CalendarAppointment = {
   mode: AppointmentMode
   reason: string
   notes?: string
+  joinUrl?: string
 }

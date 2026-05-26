@@ -38,6 +38,7 @@ export function doctorAppointmentToCalendar(
     mode: 'video',
     reason: appointment.issue?.trim() || 'Consultation',
     notes: appointment.video_message ?? undefined,
+    joinUrl: appointment.join_url ?? undefined,
   }
 }
 

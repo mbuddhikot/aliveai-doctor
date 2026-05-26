@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { DateTime } from 'luxon'
 import {
@@ -17,12 +17,21 @@ import {
 import {
   DOCTOR_APPOINTMENTS_QUERY_KEY,
   listDoctorAppointments,
+  rescheduleDoctorAppointment,
 } from '../../../features/appointments/api/appointmentsApi'
+import { RescheduleAppointmentModal } from '../../../features/appointments/components/RescheduleAppointmentModal'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
+import type { DoctorAppointment } from '../../../features/appointments/types'
+import {
+  startAppointmentErrorMessage,
+  useStartAppointment,
+} from '../../../features/dashboard/hooks/useStartAppointment'
+import { extractApiErrorMessage } from '../../../lib/apiClient'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import { mapDoctorAppointmentsToCalendar } from '../../../features/calendar/lib/mapDoctorAppointment'
 import { DEFAULT_PROFILE_TIMEZONE } from '../../../features/doctor-onboarding/constants'
 import {
+  addDaysToDateKey,
   addMonthsInZone,
   calendarMonthDayKeys,
   dayOfMonthInZone,
@@ -105,6 +114,19 @@ function sortByTime(appointments: CalendarAppointment[]): CalendarAppointment[] 
   )
 }
 
+function formatWeekRangeLabel(dateKey: string, timezone: string): string {
+  const days = weekDayKeysAround(dateKey, timezone)
+  const start = DateTime.fromISO(days[0], { zone: timezone })
+  const end = DateTime.fromISO(days[6], { zone: timezone })
+  if (start.month === end.month) {
+    return `${start.toFormat('LLL d')} – ${end.toFormat('d, yyyy')}`
+  }
+  if (start.year === end.year) {
+    return `${start.toFormat('LLL d')} – ${end.toFormat('LLL d, yyyy')}`
+  }
+  return `${start.toFormat('LLL d, yyyy')} – ${end.toFormat('LLL d, yyyy')}`
+}
+
 function StatPill({
   label,
   value,
@@ -144,56 +166,61 @@ const VIEW_TABS: { id: CalendarView; label: string }[] = [
   { id: 'day', label: 'Day' },
 ]
 
-function CalendarViewSearchBar({
+function ViewTabs({
   view,
   onViewChange,
-  search,
-  onSearchChange,
 }: {
   view: CalendarView
   onViewChange: (value: CalendarView) => void
-  search: string
-  onSearchChange: (value: string) => void
 }) {
   return (
-    <div className="flex h-8 min-w-0 flex-1 items-stretch overflow-hidden rounded-md border border-[#dfe3ea] bg-white focus-within:border-[#8a37ff] focus-within:ring-1 focus-within:ring-[#8a37ff]/25">
-      <div
-        className="flex shrink-0 items-stretch border-r border-[#dfe3ea] bg-[#f8fafc]"
-        role="tablist"
-        aria-label="Calendar view"
-      >
-        {VIEW_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={view === tab.id}
-            onClick={() => onViewChange(tab.id)}
-            className={clsx(
-              'px-2.5 text-[10px] font-bold transition sm:px-3 sm:text-[11px]',
-              view === tab.id
-                ? 'bg-white text-[#8a37ff]'
-                : 'text-[#64748b] hover:bg-white/60 hover:text-[#111827]',
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <label className="relative flex min-w-0 flex-1 items-center">
-        <FiSearch
-          className="pointer-events-none absolute left-2 h-3 w-3 text-[#94a3b8]"
-          aria-hidden
-        />
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search patient or reason"
-          className="h-full w-full min-w-0 border-0 bg-transparent py-0 pl-7 pr-2 text-xs text-[#111827] outline-none placeholder:text-[#94a3b8] focus:ring-0"
-        />
-      </label>
+    <div
+      className="flex rounded-md border border-[#dfe3ea] bg-[#f8fafc] p-0.5"
+      role="tablist"
+      aria-label="Calendar view"
+    >
+      {VIEW_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={view === tab.id}
+          onClick={() => onViewChange(tab.id)}
+          className={clsx(
+            'rounded px-3 py-1 text-xs font-bold transition',
+            view === tab.id
+              ? 'bg-white text-[#8a37ff] shadow-sm'
+              : 'text-[#64748b] hover:text-[#111827]',
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
     </div>
+  )
+}
+
+function SearchInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="relative flex min-w-0 flex-1 items-center sm:flex-none">
+      <FiSearch
+        className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[#94a3b8]"
+        aria-hidden
+      />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search patient or reason"
+        className="h-8 w-full rounded-md border border-[#dfe3ea] bg-white pl-8 pr-3 text-xs text-[#111827] outline-none placeholder:text-[#94a3b8] focus:border-[#8a37ff] focus:ring-1 focus:ring-[#8a37ff]/25 sm:w-48"
+      />
+    </label>
   )
 }
 
@@ -373,9 +400,15 @@ function AgendaList({
 function AppointmentDetails({
   appointment,
   doctorTimezone,
+  onReschedule,
+  onStartConsultation,
+  isStartingConsultation,
 }: {
   appointment?: CalendarAppointment
   doctorTimezone: string
+  onReschedule: () => void
+  onStartConsultation: () => void
+  isStartingConsultation: boolean
 }) {
   return (
     <section className="rounded-lg border border-[#dfe3ea] bg-white shadow-sm xl:sticky xl:top-2 xl:self-start">
@@ -423,16 +456,32 @@ function AppointmentDetails({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
+              onClick={onReschedule}
               className="h-8 rounded-md border border-[#dfe3ea] bg-white text-xs font-bold text-[#253047] transition hover:bg-[#f8fafc]"
             >
               Reschedule
             </button>
-            <button
-              type="button"
-              className="h-8 rounded-md bg-[#8a37ff] text-xs font-bold text-white transition hover:bg-[#772cf0]"
-            >
-              Start visit
-            </button>
+            {appointment.joinUrl ? (
+              <a
+                href={appointment.joinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center rounded-md bg-[#111827] text-xs font-bold text-white transition hover:bg-black"
+              >
+                <FiVideo className="mr-1.5 h-3.5 w-3.5" />
+                Join call
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled={isStartingConsultation}
+                onClick={onStartConsultation}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[#8a37ff] text-xs font-bold text-white transition hover:bg-[#772cf0] disabled:opacity-60"
+              >
+                <FiVideo className="h-3.5 w-3.5" />
+                {isStartingConsultation ? 'Starting…' : 'Start consultation'}
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -499,6 +548,7 @@ function initialCalendarMonth(timezone: string) {
 }
 
 export function CalendarPage() {
+  const queryClient = useQueryClient()
   const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
     useDoctorId()
   const { doctorTimezone } = useDoctorTimezone()
@@ -513,6 +563,11 @@ export function CalendarPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>()
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false)
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null)
+  const [startCallError, setStartCallError] = useState<string | null>(null)
+
+  const startCallMutation = useStartAppointment()
 
   const appointmentsQuery = useQuery({
     queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
@@ -559,7 +614,46 @@ export function CalendarPage() {
     appointments.find((item) => item.id === selectedAppointmentId) ||
     selectedDayAppointments[0]
 
+  const rawAppointmentsById = useMemo(() => {
+    const map = new Map<string, DoctorAppointment>()
+    ;(appointmentsQuery.data?.data ?? []).forEach((a) => map.set(a.id, a))
+    return map
+  }, [appointmentsQuery.data?.data])
+
+  const rawSelectedAppointment = selectedAppointment
+    ? rawAppointmentsById.get(selectedAppointment.id)
+    : undefined
+
+  const rescheduleMutation = useMutation({
+    mutationFn: (payload: { date: string; time: string; duration_minutes: number }) =>
+      rescheduleDoctorAppointment({
+        appointmentId: selectedAppointment!.id,
+        doctorId: doctorId!,
+        payload,
+      }),
+    onSuccess: () => {
+      setIsRescheduleOpen(false)
+      setRescheduleError(null)
+      void queryClient.invalidateQueries({ queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY] })
+    },
+    onError: (err) => {
+      setRescheduleError(extractApiErrorMessage(err, 'Unable to reschedule'))
+    },
+  })
+
   const todayKey = doctorTodayKey(doctorTimezone)
+
+  const isOnToday = useMemo(() => {
+    if (view === 'month') {
+      const todayDt = DateTime.fromISO(todayKey, { zone: doctorTimezone })
+      return calendarMonth.year === todayDt.year && calendarMonth.month === todayDt.month
+    }
+    if (view === 'week') {
+      return weekDayKeysAround(selectedDate, doctorTimezone).includes(todayKey)
+    }
+    return selectedDate === todayKey
+  }, [view, calendarMonth, selectedDate, todayKey, doctorTimezone])
+
   const todayAppointments = appointments.filter(
     (appointment) => appointment.date === todayKey,
   )
@@ -568,11 +662,62 @@ export function CalendarPage() {
   )
   const confirmedCount = appointments.length
 
+  // Label shown in the navigation header — changes with view type
+  const navLabel = useMemo(() => {
+    if (view === 'month') {
+      return formatDoctorMonthYear(calendarMonth.year, calendarMonth.month, doctorTimezone)
+    }
+    if (view === 'week') {
+      return formatWeekRangeLabel(selectedDate, doctorTimezone)
+    }
+    return formatDoctorLongDate(selectedDate, doctorTimezone)
+  }, [view, calendarMonth, selectedDate, doctorTimezone])
+
   const goToToday = () => {
     const todayKeyValue = doctorTodayKey(doctorTimezone)
     setCalendarMonth(initialCalendarMonth(doctorTimezone))
     setSelectedDate(todayKeyValue)
     setSelectedAppointmentId(undefined)
+  }
+
+  const navigatePrev = () => {
+    if (view === 'month') {
+      setCalendarMonth((prev) =>
+        addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
+      )
+    } else if (view === 'week') {
+      const newDate = addDaysToDateKey(selectedDate, -7, doctorTimezone)
+      setSelectedDate(newDate)
+      setSelectedAppointmentId(undefined)
+      const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+      if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+    } else {
+      const newDate = addDaysToDateKey(selectedDate, -1, doctorTimezone)
+      setSelectedDate(newDate)
+      setSelectedAppointmentId(undefined)
+      const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+      if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+    }
+  }
+
+  const navigateNext = () => {
+    if (view === 'month') {
+      setCalendarMonth((prev) =>
+        addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
+      )
+    } else if (view === 'week') {
+      const newDate = addDaysToDateKey(selectedDate, 7, doctorTimezone)
+      setSelectedDate(newDate)
+      setSelectedAppointmentId(undefined)
+      const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+      if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+    } else {
+      const newDate = addDaysToDateKey(selectedDate, 1, doctorTimezone)
+      setSelectedDate(newDate)
+      setSelectedAppointmentId(undefined)
+      const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+      if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+    }
   }
 
   const selectDate = (date: string) => {
@@ -610,79 +755,75 @@ export function CalendarPage() {
 
   return (
     <div className="space-y-2">
-      <section className="rounded-lg border border-[#dfe3ea] bg-white px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h1 className="text-base font-bold text-black sm:text-lg">
-              Calendar
-            </h1>
-            <div className="flex flex-wrap gap-1.5">
-              <StatPill
-                label="today"
-                value={String(todayAppointments.length)}
-                icon={<FiClock className="h-3.5 w-3.5" />}
-              />
-              <StatPill
-                label="upcoming"
-                value={String(upcomingAppointments.length)}
-                icon={<FiCalendar className="h-3.5 w-3.5" />}
-              />
-              <StatPill
-                label="confirmed"
-                value={String(confirmedCount)}
-                icon={<FiUser className="h-3.5 w-3.5" />}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() =>
-                setCalendarMonth((prev) =>
-                  addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
-                )
-              }
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
-              aria-label="Previous month"
-            >
-              <FiChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={goToToday}
-              className="h-7 rounded-md border border-[#dfe3ea] bg-white px-2.5 text-[11px] font-bold text-[#253047] hover:bg-[#f8fafc]"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setCalendarMonth((prev) =>
-                  addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
-                )
-              }
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
-              aria-label="Next month"
-            >
-              <FiChevronRight className="h-3.5 w-3.5" />
-            </button>
+      <section className="rounded-lg border border-[#dfe3ea] bg-white px-3 py-2.5 shadow-sm">
+        {/* Row 1: title + stats */}
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-base font-bold text-black sm:text-lg">Calendar</h1>
+          <div className="flex flex-wrap gap-1.5">
+            <StatPill
+              label="today"
+              value={String(todayAppointments.length)}
+              icon={<FiClock className="h-3.5 w-3.5" />}
+            />
+            <StatPill
+              label="upcoming"
+              value={String(upcomingAppointments.length)}
+              icon={<FiCalendar className="h-3.5 w-3.5" />}
+            />
+            <StatPill
+              label="confirmed"
+              value={String(confirmedCount)}
+              icon={<FiUser className="h-3.5 w-3.5" />}
+            />
           </div>
         </div>
 
-        <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:items-center">
-          <CalendarViewSearchBar
-            view={view}
-            onViewChange={setView}
-            search={search}
-            onSearchChange={setSearch}
-          />
-          <div className="flex shrink-0 gap-1.5">
+        {/* Row 2: view tabs + navigation + search + filters */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {/* View switcher */}
+          <ViewTabs view={view} onViewChange={setView} />
+
+          {/* Navigation: prev / label / next / today */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={navigatePrev}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] transition hover:bg-[#f8fafc]"
+              aria-label="Previous"
+            >
+              <FiChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <span className="min-w-[130px] text-center text-sm font-bold text-black">
+              {navLabel}
+            </span>
+            <button
+              type="button"
+              onClick={navigateNext}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] transition hover:bg-[#f8fafc]"
+              aria-label="Next"
+            >
+              <FiChevronRight className="h-3.5 w-3.5" />
+            </button>
+            {!isOnToday ? (
+              <button
+                type="button"
+                onClick={goToToday}
+                className="h-7 rounded-md border border-[#dfe3ea] bg-white px-2.5 text-[11px] font-bold text-[#253047] transition hover:bg-[#f8fafc]"
+              >
+                Today
+              </button>
+            ) : null}
+          </div>
+
+          {/* Search + filters pushed to the right */}
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-1.5">
+            <SearchInput value={search} onChange={setSearch} />
             <select
               value={statusFilter}
               onChange={(event) =>
                 setStatusFilter(event.target.value as StatusFilter)
               }
-              className="h-8 min-w-0 flex-1 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[112px] sm:flex-none"
+              className="h-8 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[112px]"
             >
               <option value="all">All statuses</option>
               {Object.entries(STATUS_META).map(([status, meta]) => (
@@ -694,7 +835,7 @@ export function CalendarPage() {
             <select
               value={modeFilter}
               onChange={(event) => setModeFilter(event.target.value as ModeFilter)}
-              className="h-8 min-w-0 flex-1 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[100px] sm:flex-none"
+              className="h-8 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[100px]"
             >
               <option value="all">All modes</option>
               {Object.entries(MODE_META).map(([mode, meta]) => (
@@ -704,19 +845,6 @@ export function CalendarPage() {
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
-          <span className="font-bold text-black">
-            {formatDoctorMonthYear(
-              calendarMonth.year,
-              calendarMonth.month,
-              doctorTimezone,
-            )}
-          </span>
-          <span className="text-[#64748b]">
-            {formatDoctorLongDate(selectedDate, doctorTimezone)}
-          </span>
         </div>
 
         {appointmentsQuery.isError ? (
@@ -763,8 +891,37 @@ export function CalendarPage() {
         <AppointmentDetails
           appointment={selectedAppointment}
           doctorTimezone={doctorTimezone}
+          onReschedule={() => setIsRescheduleOpen(true)}
+          onStartConsultation={() => {
+            if (!selectedAppointment) return
+            setStartCallError(null)
+            startCallMutation.mutate(selectedAppointment.id, {
+              onError: (err) => setStartCallError(startAppointmentErrorMessage(err)),
+            })
+          }}
+          isStartingConsultation={startCallMutation.isPending}
         />
       </div>
+
+      {startCallError ? (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          {startCallError}
+        </div>
+      ) : null}
+
+      {isRescheduleOpen && selectedAppointment && rawSelectedAppointment && (
+        <RescheduleAppointmentModal
+          appointment={rawSelectedAppointment}
+          profileTimezone={doctorTimezone}
+          isSubmitting={rescheduleMutation.isPending}
+          error={rescheduleError}
+          onClose={() => {
+            setIsRescheduleOpen(false)
+            setRescheduleError(null)
+          }}
+          onConfirm={(payload) => rescheduleMutation.mutate(payload)}
+        />
+      )}
     </div>
   )
 }

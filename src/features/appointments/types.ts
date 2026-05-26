@@ -2,10 +2,19 @@ export type AppointmentStatus = 'upcoming' | 'past' | 'cancelled'
 
 export type AppointmentWorkflowStatus = 'pending' | 'confirmed' | 'reject'
 
+/** From API `doctor_status` — doctor UI filter values. */
+export type DoctorAppointmentStatus =
+  | 'pending'
+  | 'confirm'
+  | 'cancelled'
+  | 'done'
+  | 'postponed'
+
 export type DoctorAppointment = {
   id: string
   status: AppointmentStatus
   workflow_status: AppointmentWorkflowStatus
+  doctor_status?: DoctorAppointmentStatus | null
   doctor_id?: string | null
   doctor_name?: string | null
   patient_id?: string | null

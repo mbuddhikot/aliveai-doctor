@@ -7,6 +7,7 @@ import {
   FiCalendar,
   FiCheck,
   FiClock,
+  FiFileText,
   FiRefreshCw,
   FiSearch,
   FiVideo,
@@ -15,6 +16,7 @@ import {
 import {
   approveDoctorAppointment,
   DOCTOR_APPOINTMENTS_QUERY_KEY,
+  fetchAppointmentPatientId,
   listDoctorAppointments,
   rejectDoctorAppointment,
   rescheduleDoctorAppointment,
@@ -42,9 +44,30 @@ import {
 } from '../../../features/appointments/lib/format'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import type { DoctorAppointment } from '../../../features/appointments/types'
+import {
+  startAppointmentErrorMessage,
+  useStartAppointment,
+} from '../../../features/dashboard/hooks/useStartAppointment'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
+import {
+  createDoctorPrescription,
+  deleteDoctorPrescription,
+  DOCTOR_PRESCRIPTIONS_QUERY_KEY,
+  listDoctorPrescriptions,
+  updateDoctorPrescription,
+} from '../../../features/prescriptions/api/prescriptionsApi'
+import { PrescriptionCard } from '../../../features/prescriptions/components/PrescriptionCard'
+import { PrescriptionModal } from '../../../features/prescriptions/components/PrescriptionModal'
+import { buildPrescriptionPayload } from '../../../features/prescriptions/lib/buildPrescriptionPayload'
+import { buildCreatePrescriptionPayload } from '../../../features/prescriptions/lib/buildCreatePrescriptionPayload'
+import {
+  buildPatientIdByName,
+  resolvePatientId,
+} from '../../../features/prescriptions/lib/resolvePatientId'
+import type { Prescription } from '../../../features/prescriptions/types'
 
-type ModalAction = 'approve' | 'reject' | 'reschedule' | null
+type ModalAction = 'approve' | 'reject' | 'reschedule' | 'prescription' | null
+type PrescriptionModalMode = 'create' | 'edit'
 
 function StatPill({
   label,
@@ -125,7 +148,10 @@ function AppointmentListItem({
         )}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <WorkflowBadge workflowStatus={appointment.workflow_status} />
+        <WorkflowBadge
+          workflowStatus={appointment.workflow_status}
+          doctorStatus={appointment.doctor_status}
+        />
         <StatusBadge status={appointment.status} />
         {fee && (
           <span className="text-xs font-semibold text-[#64748b]">{fee}</span>
@@ -138,17 +164,25 @@ function AppointmentListItem({
 function AppointmentDetailPanel({
   appointment,
   profileTimezone,
+  prescriptions,
   onApprove,
   onReject,
   onReschedule,
-  onJoin,
+  onStartCall,
+  onCreatePrescription,
+  onEditPrescription,
+  isStartingCall,
 }: {
   appointment: DoctorAppointment
   profileTimezone: string
+  prescriptions: Prescription[]
   onApprove: () => void
   onReject: () => void
   onReschedule: () => void
-  onJoin: () => void
+  onStartCall: () => void
+  onCreatePrescription: () => void
+  onEditPrescription: (prescription: Prescription) => void
+  isStartingCall?: boolean
 }) {
   const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
   const fee = formatFee(appointment.fee_amount, appointment.fee_currency)
@@ -157,10 +191,11 @@ function AppointmentDetailPanel({
   const isConfirmed = appointment.workflow_status === 'confirmed'
   const canReschedule =
     isConfirmed && appointment.status === 'upcoming' && !isRejected
-  const canJoin =
-    Boolean(appointment.join_url) &&
-    isConfirmed &&
-    isAppointmentUpcoming(appointment)
+  const canStartCall =
+    isConfirmed && isAppointmentUpcoming(appointment)
+  const showPrescriptionAction = Boolean(
+    appointment.patient_name?.trim() || appointment.patient_id,
+  )
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[12px] border border-[#dfe3ea] bg-white shadow-[0_8px_24px_rgba(31,41,55,0.04)]">
@@ -174,11 +209,14 @@ function AppointmentDetailPanel({
           <p className="mt-1 text-sm text-[#64748b]">{appointment.patient_email}</p>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <WorkflowBadge workflowStatus={appointment.workflow_status} />
+          <WorkflowBadge
+          workflowStatus={appointment.workflow_status}
+          doctorStatus={appointment.doctor_status}
+        />
           <StatusBadge status={appointment.status} />
         </div>
 
-        {(isPending || canReschedule || canJoin) && (
+        {(isPending || canReschedule || canStartCall || showPrescriptionAction) && (
           <div className="mt-3 flex flex-wrap gap-2">
             {isPending && (
               <>
@@ -210,17 +248,38 @@ function AppointmentDetailPanel({
                 Reschedule
               </button>
             )}
-            {canJoin && (
-              <a
-                href={appointment.join_url!}
-                target="_blank"
-                rel="noreferrer"
-                onClick={onJoin}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[#111827] px-4 text-sm font-bold text-white transition hover:bg-black"
+            {canStartCall && (
+              appointment.join_url ? (
+                <a
+                  href={appointment.join_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[#111827] px-4 text-sm font-bold text-white transition hover:bg-black"
+                >
+                  <FiVideo className="h-4 w-4" />
+                  Join call
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isStartingCall}
+                  onClick={onStartCall}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[#111827] px-4 text-sm font-bold text-white transition hover:bg-black disabled:opacity-60"
+                >
+                  <FiVideo className="h-4 w-4" />
+                  {isStartingCall ? 'Starting…' : 'Start call'}
+                </button>
+              )
+            )}
+            {showPrescriptionAction && (
+              <button
+                type="button"
+                onClick={onCreatePrescription}
+                className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[#8a37ff] px-4 text-sm font-bold text-white transition hover:bg-[#772cf0]"
               >
-                <FiVideo className="h-4 w-4" />
-                Join call
-              </a>
+                <FiFileText className="h-4 w-4" />
+                Create prescription
+              </button>
             )}
           </div>
         )}
@@ -277,6 +336,21 @@ function AppointmentDetailPanel({
             </p>
           </div>
         )}
+
+        {prescriptions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">
+              Prescriptions ({prescriptions.length})
+            </p>
+            {prescriptions.map((prescription) => (
+              <PrescriptionCard
+                key={prescription.id}
+                prescription={prescription}
+                onEdit={() => onEditPrescription(prescription)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )
@@ -313,6 +387,13 @@ export function MyAppointmentsPage() {
   const [selectedId, setSelectedId] = useState<string>()
   const [modalAction, setModalAction] = useState<ModalAction>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [prescriptionModalMode, setPrescriptionModalMode] =
+    useState<PrescriptionModalMode>('create')
+  const [editingPrescription, setEditingPrescription] =
+    useState<Prescription | null>(null)
+  const [startCallError, setStartCallError] = useState<string | null>(null)
+
+  const startCallMutation = useStartAppointment()
 
   const appointmentsQuery = useQuery({
     queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
@@ -329,6 +410,61 @@ export function MyAppointmentsPage() {
     filteredAppointments.find((item) => item.id === selectedId) ??
     filteredAppointments[0]
 
+  const prescriptionsQuery = useQuery({
+    queryKey: [DOCTOR_PRESCRIPTIONS_QUERY_KEY, doctorId],
+    queryFn: () => listDoctorPrescriptions(),
+    enabled: Boolean(doctorId),
+  })
+
+  const appointmentPrescriptions = useMemo(() => {
+    if (!selectedAppointment) return []
+    const list = prescriptionsQuery.data?.data ?? []
+    const patientName = selectedAppointment.patient_name?.trim().toLowerCase()
+    return list.filter(
+      (item) =>
+        item.appointment_id === selectedAppointment.id ||
+        (selectedAppointment.patient_id &&
+          item.patient_id === selectedAppointment.patient_id) ||
+        (patientName &&
+          item.patient_name?.trim().toLowerCase() === patientName),
+    )
+  }, [prescriptionsQuery.data?.data, selectedAppointment])
+
+  const patientIdByName = useMemo(
+    () => buildPatientIdByName(appointmentsQuery.data?.data ?? []),
+    [appointmentsQuery.data?.data],
+  )
+
+  const selectedPatientId = useMemo(() => {
+    if (!selectedAppointment) return null
+    return resolvePatientId(
+      selectedAppointment,
+      prescriptionsQuery.data?.data ?? [],
+      patientIdByName,
+    )
+  }, [
+    selectedAppointment,
+    prescriptionsQuery.data?.data,
+    patientIdByName,
+  ])
+
+  const appointmentPatientIdQuery = useQuery({
+    queryKey: [
+      'appointment-patient-id',
+      selectedAppointment?.id,
+      selectedPatientId,
+    ],
+    queryFn: () =>
+      fetchAppointmentPatientId(selectedAppointment!.id, doctorId!),
+    enabled: Boolean(
+      doctorId && selectedAppointment?.id && !selectedPatientId,
+    ),
+    staleTime: 60_000,
+  })
+
+  const effectivePatientId =
+    selectedPatientId ?? appointmentPatientIdQuery.data ?? null
+
   const stats = useMemo(() => {
     const list = appointmentsQuery.data?.data ?? []
     return {
@@ -342,6 +478,12 @@ export function MyAppointmentsPage() {
   const invalidateAppointments = () => {
     void queryClient.invalidateQueries({
       queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY],
+    })
+  }
+
+  const invalidatePrescriptions = () => {
+    void queryClient.invalidateQueries({
+      queryKey: [DOCTOR_PRESCRIPTIONS_QUERY_KEY],
     })
   }
 
@@ -400,9 +542,90 @@ export function MyAppointmentsPage() {
     },
   })
 
+  const createPrescriptionMutation = useMutation({
+    mutationFn: async (payload: { diagnosis: string; notes: string }) => {
+      let patientId = effectivePatientId
+      if (!patientId) {
+        patientId = await fetchAppointmentPatientId(
+          selectedAppointment!.id,
+          doctorId!,
+        )
+      }
+      if (!patientId) {
+        throw new Error(
+          'Could not find the patient for this appointment. The appointments API must include patient_id, or try again after the patient has a prior prescription.',
+        )
+      }
+      return createDoctorPrescription(
+        buildCreatePrescriptionPayload({
+          appointmentId: selectedAppointment!.id,
+          patientUserId: patientId,
+          diagnosis: payload.diagnosis,
+          notes: payload.notes,
+        }),
+      )
+    },
+    onSuccess: () => {
+      setModalAction(null)
+      setActionError(null)
+      invalidatePrescriptions()
+    },
+    onError: (err) => {
+      setActionError(extractApiErrorMessage(err, 'Unable to save prescription'))
+    },
+  })
+
+  const updatePrescriptionMutation = useMutation({
+    mutationFn: (payload: { diagnosis: string; notes: string }) =>
+      updateDoctorPrescription({
+        prescriptionId: editingPrescription!.id,
+        payload: buildPrescriptionPayload(payload),
+      }),
+    onSuccess: () => {
+      setModalAction(null)
+      setEditingPrescription(null)
+      setActionError(null)
+      invalidatePrescriptions()
+    },
+    onError: (err) => {
+      setActionError(extractApiErrorMessage(err, 'Unable to update prescription'))
+    },
+  })
+
+  const deletePrescriptionMutation = useMutation({
+    mutationFn: () => deleteDoctorPrescription(editingPrescription!.id),
+    onSuccess: () => {
+      setModalAction(null)
+      setEditingPrescription(null)
+      setActionError(null)
+      invalidatePrescriptions()
+    },
+    onError: (err) => {
+      setActionError(extractApiErrorMessage(err, 'Unable to delete prescription'))
+    },
+  })
+
   const openModal = (action: ModalAction) => {
     setActionError(null)
     setModalAction(action)
+  }
+
+  const openCreatePrescription = () => {
+    setPrescriptionModalMode('create')
+    setEditingPrescription(null)
+    openModal('prescription')
+  }
+
+  const openEditPrescription = (prescription: Prescription) => {
+    setPrescriptionModalMode('edit')
+    setEditingPrescription(prescription)
+    openModal('prescription')
+  }
+
+  const closePrescriptionModal = () => {
+    setModalAction(null)
+    setEditingPrescription(null)
+    setActionError(null)
   }
 
   if (doctorIdLoading) {
@@ -554,10 +777,21 @@ export function MyAppointmentsPage() {
             <AppointmentDetailPanel
               appointment={selectedAppointment}
               profileTimezone={profileTimezone}
+              prescriptions={appointmentPrescriptions}
               onApprove={() => openModal('approve')}
               onReject={() => openModal('reject')}
               onReschedule={() => openModal('reschedule')}
-              onJoin={() => undefined}
+              onStartCall={() => {
+                if (!selectedAppointment) return
+                setStartCallError(null)
+                startCallMutation.mutate(selectedAppointment.id, {
+                  onError: (err) =>
+                    setStartCallError(startAppointmentErrorMessage(err)),
+                })
+              }}
+              isStartingCall={startCallMutation.isPending}
+              onCreatePrescription={openCreatePrescription}
+              onEditPrescription={openEditPrescription}
             />
           ) : (
             <section className="flex items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
@@ -593,6 +827,34 @@ export function MyAppointmentsPage() {
           error={actionError}
           onClose={() => setModalAction(null)}
           onConfirm={(payload) => rescheduleMutation.mutate(payload)}
+        />
+      )}
+
+      {modalAction === 'prescription' && selectedAppointment && (
+        <PrescriptionModal
+          mode={prescriptionModalMode}
+          patientName={selectedAppointment.patient_name}
+          defaultDiagnosis={selectedAppointment.issue}
+          prescription={editingPrescription ?? undefined}
+          isSubmitting={
+            createPrescriptionMutation.isPending ||
+            updatePrescriptionMutation.isPending
+          }
+          isDeleting={deletePrescriptionMutation.isPending}
+          error={actionError}
+          onClose={closePrescriptionModal}
+          onSave={(payload) => {
+            if (prescriptionModalMode === 'edit') {
+              updatePrescriptionMutation.mutate(payload)
+            } else {
+              createPrescriptionMutation.mutate(payload)
+            }
+          }}
+          onDelete={
+            prescriptionModalMode === 'edit'
+              ? () => deletePrescriptionMutation.mutate()
+              : undefined
+          }
         />
       )}
     </div>

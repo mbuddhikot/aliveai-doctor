@@ -2,9 +2,19 @@ import type {
   AppointmentStatus,
   AppointmentWorkflowStatus,
   DoctorAppointment,
+  DoctorAppointmentStatus,
 } from '../types'
+import { extractPatientId } from './extractPatientId'
 
 type RawAppointment = Record<string, unknown>
+
+const DOCTOR_STATUSES: DoctorAppointmentStatus[] = [
+  'pending',
+  'confirm',
+  'cancelled',
+  'done',
+  'postponed',
+]
 
 function isRecord(value: unknown): value is RawAppointment {
   return typeof value === 'object' && value !== null
@@ -30,22 +40,55 @@ function nameFromRecord(record: RawAppointment): string | undefined {
   return undefined
 }
 
+function normalizeDoctorStatus(value: unknown): DoctorAppointmentStatus | null {
+  const status = String(value || '').toLowerCase()
+  if (DOCTOR_STATUSES.includes(status as DoctorAppointmentStatus)) {
+    return status as DoctorAppointmentStatus
+  }
+  if (status === 'confirmed') return 'confirm'
+  return null
+}
+
 function normalizeStatus(value: unknown): AppointmentStatus {
   const status = String(value || 'upcoming').toLowerCase()
   if (status === 'past' || status === 'cancelled' || status === 'upcoming') {
     return status
   }
-  if (['completed', 'confirmed', 'ongoing'].includes(status)) return 'upcoming'
+  if (['completed', 'done'].includes(status)) return 'past'
   return 'upcoming'
 }
 
 function normalizeWorkflow(value: unknown): AppointmentWorkflowStatus {
   const workflow = String(value || 'pending').toLowerCase()
-  if (workflow === 'confirmed' || workflow === 'reject' || workflow === 'pending') {
-    return workflow
-  }
-  if (workflow === 'rejected') return 'reject'
+  if (workflow === 'confirmed' || workflow === 'confirm') return 'confirmed'
+  if (workflow === 'reject' || workflow === 'rejected') return 'reject'
+  if (workflow === 'pending' || workflow === 'pending_doctor') return 'pending'
   return 'pending'
+}
+
+function applyDoctorStatus(
+  doctorStatus: DoctorAppointmentStatus | null,
+  status: AppointmentStatus,
+  workflowStatus: AppointmentWorkflowStatus,
+): { status: AppointmentStatus; workflow_status: AppointmentWorkflowStatus } {
+  if (!doctorStatus) {
+    return { status, workflow_status: workflowStatus }
+  }
+
+  switch (doctorStatus) {
+    case 'pending':
+      return { status: 'upcoming', workflow_status: 'pending' }
+    case 'confirm':
+      return { status: 'upcoming', workflow_status: 'confirmed' }
+    case 'cancelled':
+      return { status: 'cancelled', workflow_status: 'reject' }
+    case 'done':
+      return { status: 'past', workflow_status: 'confirmed' }
+    case 'postponed':
+      return { status: 'upcoming', workflow_status: 'confirmed' }
+    default:
+      return { status, workflow_status: workflowStatus }
+  }
 }
 
 export function normalizeDoctorAppointment(item: RawAppointment): DoctorAppointment {
@@ -53,13 +96,19 @@ export function normalizeDoctorAppointment(item: RawAppointment): DoctorAppointm
   const user = isRecord(item.user) ? item.user : isRecord(item.booked_by) ? item.booked_by : {}
   const booker = isRecord(item.booker) ? item.booker : {}
 
-  const patientId =
-    str(item.patient_id) ||
-    str(item.patientId) ||
-    str(patient.id) ||
-    str(patient.user_id) ||
-    str(user.id) ||
-    str(item.user_id)
+  const doctorId = str(item.doctor_id) ?? str(item.doctorId) ?? null
+  const patientId = extractPatientId(item, doctorId)
+  const doctorStatus = normalizeDoctorStatus(
+    item.doctor_status ?? item.doctorStatus,
+  )
+
+  let status = normalizeStatus(item.status)
+  let workflow_status = normalizeWorkflow(
+    item.workflow_status ?? item.workflowStatus,
+  )
+  const derived = applyDoctorStatus(doctorStatus, status, workflow_status)
+  status = derived.status
+  workflow_status = derived.workflow_status
 
   const patientName =
     str(item.patient_name) ||
@@ -78,11 +127,10 @@ export function normalizeDoctorAppointment(item: RawAppointment): DoctorAppointm
 
   return {
     id: String(item.id || item.appointment_id || crypto.randomUUID()),
-    status: normalizeStatus(item.status),
-    workflow_status: normalizeWorkflow(
-      item.workflow_status ?? item.workflowStatus,
-    ),
-    doctor_id: str(item.doctor_id) ?? str(item.doctorId) ?? null,
+    status,
+    workflow_status,
+    doctor_status: doctorStatus,
+    doctor_id: doctorId,
     doctor_name: str(item.doctor_name) ?? str(item.doctorName) ?? null,
     patient_id: patientId ?? null,
     patient_name: patientName ?? null,
@@ -111,6 +159,10 @@ export function normalizeDoctorAppointment(item: RawAppointment): DoctorAppointm
 }
 
 export function normalizeAppointmentList(payload: unknown): DoctorAppointment[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord).map(normalizeDoctorAppointment)
+  }
+
   const source = isRecord(payload)
     ? payload.data || payload.appointments || payload.results
     : payload

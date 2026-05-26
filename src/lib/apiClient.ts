@@ -33,15 +33,74 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config
 })
 
+type ValidationErrorItem = {
+  msg?: string
+  loc?: (string | number)[]
+  type?: string
+}
+
 type ApiErrorBody = {
   message?: string
-  detail?: string | { msg?: string }[]
+  detail?: string | ValidationErrorItem[]
   error?: string
 }
 
+function formatValidationErrors(detail: ValidationErrorItem[]): string | null {
+  const messages = detail
+    .map((item) => {
+      if (!item || typeof item.msg !== 'string') return null
+      const path = Array.isArray(item.loc)
+        ? item.loc.filter((part) => part !== 'body').join('.')
+        : ''
+      return path ? `${path}: ${item.msg}` : item.msg
+    })
+    .filter((msg): msg is string => Boolean(msg))
+
+  if (messages.length === 0) return null
+  return messages.join(' · ')
+}
+
+/** Resolves the underlying Axios error when APIs wrap errors in `Error` + `cause`. */
+export function getAxiosError(err: unknown): AxiosError | null {
+  if (axios.isAxiosError(err)) return err
+  if (err instanceof Error && axios.isAxiosError(err.cause)) {
+    return err.cause
+  }
+  return null
+}
+
+function messageFromResponseBody(body: unknown): string | null {
+  if (typeof body === 'string' && body.trim()) {
+    return body.trim()
+  }
+  if (!body || typeof body !== 'object') return null
+
+  const record = body as ApiErrorBody
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+  if (typeof record.detail === 'string' && record.detail.trim()) {
+    if (record.detail.includes('multipart/form-data')) {
+      return 'Document upload failed. Please try again.'
+    }
+    return record.detail
+  }
+  if (Array.isArray(record.detail) && record.detail.length > 0) {
+    const formatted = formatValidationErrors(record.detail)
+    if (formatted) return formatted
+    const first = record.detail[0]
+    if (first && typeof first.msg === 'string') return first.msg
+  }
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error
+  }
+  return null
+}
+
 export function extractApiErrorMessage(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err)) {
-    const axErr = err as AxiosError<ApiErrorBody>
+  const axErr = getAxiosError(err)
+
+  if (axErr) {
     const status = axErr.response?.status
 
     if (!axErr.response) {
@@ -51,30 +110,36 @@ export function extractApiErrorMessage(err: unknown, fallback: string): string {
       return 'Cannot reach the API server. It may be down, starting up, or blocked by the network. Try again in a minute.'
     }
 
+    if (status === 401) {
+      return 'Your session expired. Please sign in again.'
+    }
+
+    if (status === 403) {
+      return 'You do not have permission to perform this action.'
+    }
+
+    if (status === 422) {
+      const bodyMessage = messageFromResponseBody(axErr.response.data)
+      return (
+        bodyMessage ||
+        'The request was invalid. Check required fields and try again.'
+      )
+    }
+
     if (status === 503 || status === 502 || status === 504) {
       return 'The API server is temporarily unavailable. Please try again in a minute.'
     }
 
-    const body = axErr.response?.data
-
-    if (body) {
-      if (typeof body.message === 'string' && body.message.trim()) {
-        return body.message
-      }
-      if (typeof body.detail === 'string' && body.detail.trim()) {
-        if (body.detail.includes('multipart/form-data')) {
-          return 'Document upload failed. Please try again.'
-        }
-        return body.detail
-      }
-      if (Array.isArray(body.detail) && body.detail.length > 0) {
-        const first = body.detail[0]
-        if (first && typeof first.msg === 'string') return first.msg
-      }
-      if (typeof body.error === 'string' && body.error.trim()) {
-        return body.error
-      }
+    if (status === 500) {
+      const bodyMessage = messageFromResponseBody(axErr.response.data)
+      return (
+        bodyMessage ||
+        'The API server returned an internal error (500). This is a backend issue — try again later or contact support.'
+      )
     }
+
+    const bodyMessage = messageFromResponseBody(axErr.response.data)
+    if (bodyMessage) return bodyMessage
 
     if (axErr.message) return axErr.message
   }

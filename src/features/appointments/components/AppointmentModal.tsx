@@ -7,6 +7,7 @@ type AppointmentModalProps = {
   children: ReactNode
   onClose: () => void
   footer?: ReactNode
+  size?: 'md' | 'lg'
 }
 
 export function AppointmentModal({
@@ -15,6 +16,7 @@ export function AppointmentModal({
   children,
   onClose,
   footer,
+  size = 'md',
 }: AppointmentModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -28,7 +30,7 @@ export function AppointmentModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="appointment-modal-title"
-        className="relative z-10 w-full max-w-lg rounded-[16px] border border-[#e6e8ee] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+        className={`relative z-10 w-full rounded-[16px] border border-[#e6e8ee] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)] ${size === 'lg' ? 'max-w-2xl' : 'max-w-lg'}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[#eef1f5] px-6 py-5">
           <div>

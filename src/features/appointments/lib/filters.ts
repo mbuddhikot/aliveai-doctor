@@ -13,6 +13,8 @@ export function filterAppointments(
       !query ||
       (item.issue?.toLowerCase().includes(query) ?? false) ||
       (item.doctor_name?.toLowerCase().includes(query) ?? false) ||
+      (item.patient_name?.toLowerCase().includes(query) ?? false) ||
+      (item.patient_email?.toLowerCase().includes(query) ?? false) ||
       item.id.toLowerCase().includes(query)
 
     if (!matchesSearch) return false
@@ -21,17 +23,25 @@ export function filterAppointments(
       case 'all':
         return true
       case 'pending':
-        return item.workflow_status === 'pending'
+        return (
+          item.doctor_status === 'pending' || item.workflow_status === 'pending'
+        )
       case 'confirmed':
-        return item.workflow_status === 'confirmed'
-      case 'rejected':
-        return item.workflow_status === 'reject'
+        return (
+          item.doctor_status === 'confirm' || item.workflow_status === 'confirmed'
+        )
       case 'upcoming':
-        return item.status === 'upcoming'
+        return (
+          item.status === 'upcoming' ||
+          item.doctor_status === 'postponed' ||
+          item.doctor_status === 'confirm'
+        )
       case 'past':
-        return item.status === 'past'
+        return item.status === 'past' || item.doctor_status === 'done'
       case 'cancelled':
-        return item.status === 'cancelled'
+        return (
+          item.status === 'cancelled' || item.doctor_status === 'cancelled'
+        )
       default:
         return true
     }

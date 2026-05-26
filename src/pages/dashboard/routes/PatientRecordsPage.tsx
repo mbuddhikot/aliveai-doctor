@@ -6,6 +6,8 @@ import {
   FiAlertCircle,
   FiCalendar,
   FiClock,
+  FiEye,
+  FiFileText,
   FiRefreshCw,
   FiSearch,
   FiUsers,
@@ -33,6 +35,13 @@ import {
   filterPatients,
 } from '../../../features/patients/lib/buildPatientDirectory'
 import type { PatientSummary } from '../../../features/patients/types'
+import {
+  DOCTOR_PRESCRIPTIONS_QUERY_KEY,
+  listDoctorPrescriptions,
+} from '../../../features/prescriptions/api/prescriptionsApi'
+import { PrescriptionViewModal } from '../../../features/prescriptions/components/PrescriptionViewModal'
+import { findPrescriptionsForVisit } from '../../../features/prescriptions/lib/findPrescriptionsForVisit'
+import type { Prescription } from '../../../features/prescriptions/types'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
 
 function StatPill({
@@ -108,12 +117,21 @@ function PatientListItem({
 function VisitRow({
   appointment,
   profileTimezone,
+  visitPrescriptions,
+  onViewPrescription,
 }: {
   appointment: DoctorAppointment
   profileTimezone: string
+  visitPrescriptions: Prescription[]
+  onViewPrescription: (prescriptionIds: string[], visitLabel: string) => void
 }) {
   const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
   const fee = formatFee(appointment.fee_amount, appointment.fee_currency)
+  const visitLabel = formatAppointmentDateTime(
+    appointment.starts_at,
+    doctorTimezone,
+  )
+  const hasPrescription = visitPrescriptions.length > 0
 
   return (
     <div className="rounded-[10px] border border-[#edf0f4] bg-white p-3">
@@ -124,7 +142,7 @@ function VisitRow({
           </p>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-[#64748b]">
             <FiCalendar className="h-3.5 w-3.5 shrink-0" />
-            {formatAppointmentDateTime(appointment.starts_at, doctorTimezone)}
+            {visitLabel}
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#64748b]">
             <FiClock className="h-3.5 w-3.5 shrink-0" />
@@ -140,20 +158,56 @@ function VisitRow({
           <span className="shrink-0 text-xs font-semibold text-[#64748b]">{fee}</span>
         )}
       </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <WorkflowBadge workflowStatus={appointment.workflow_status} />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <WorkflowBadge
+          workflowStatus={appointment.workflow_status}
+          doctorStatus={appointment.doctor_status}
+        />
         <StatusBadge status={appointment.status} />
+      </div>
+      <div className="mt-3 border-t border-[#f1f5f9] pt-3">
+        {hasPrescription ? (
+          <button
+            type="button"
+            onClick={() =>
+              onViewPrescription(
+                visitPrescriptions.map((p) => p.id),
+                visitLabel,
+              )
+            }
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e9d5ff] bg-[#faf8ff] px-3 text-xs font-semibold text-[#7c3aed] transition hover:border-[#8a37ff] hover:bg-[#f3edff]"
+          >
+            <FiEye className="h-3.5 w-3.5" />
+            {visitPrescriptions.length === 1
+              ? 'See prescription'
+              : `See prescriptions (${visitPrescriptions.length})`}
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+            <FiFileText className="h-3.5 w-3.5" />
+            No prescription on file
+          </span>
+        )}
       </div>
     </div>
   )
 }
 
+type PrescriptionViewState = {
+  prescriptionIds: string[]
+  visitLabel: string
+} | null
+
 function PatientDetailPanel({
   patient,
   profileTimezone,
+  allPrescriptions,
+  onViewPrescription,
 }: {
   patient: PatientSummary
   profileTimezone: string
+  allPrescriptions: Prescription[]
+  onViewPrescription: (prescriptionIds: string[], visitLabel: string) => void
 }) {
   const lastVisit = patient.lastVisitAt
     ? formatAppointmentDateTime(patient.lastVisitAt, profileTimezone)
@@ -209,6 +263,12 @@ function PatientDetailPanel({
               key={appointment.id}
               appointment={appointment}
               profileTimezone={profileTimezone}
+              visitPrescriptions={findPrescriptionsForVisit(
+                allPrescriptions,
+                appointment,
+                patient,
+              )}
+              onViewPrescription={onViewPrescription}
             />
           ))}
         </div>
@@ -223,11 +283,22 @@ export function PatientRecordsPage() {
   const { doctorTimezone: profileTimezone } = useDoctorTimezone()
   const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState<string>()
+  const [prescriptionView, setPrescriptionView] =
+    useState<PrescriptionViewState>(null)
+
   const appointmentsQuery = useQuery({
     queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
     queryFn: () => listDoctorAppointments({ doctorId: doctorId! }),
     enabled: Boolean(doctorId),
   })
+
+  const prescriptionsQuery = useQuery({
+    queryKey: [DOCTOR_PRESCRIPTIONS_QUERY_KEY, doctorId],
+    queryFn: () => listDoctorPrescriptions(),
+    enabled: Boolean(doctorId),
+  })
+
+  const allPrescriptions = prescriptionsQuery.data?.data ?? []
 
   const patients = useMemo(() => {
     const list = buildPatientDirectory(appointmentsQuery.data?.data ?? [])
@@ -378,6 +449,10 @@ export function PatientRecordsPage() {
             <PatientDetailPanel
               patient={selectedPatient}
               profileTimezone={profileTimezone}
+              allPrescriptions={allPrescriptions}
+              onViewPrescription={(prescriptionIds, visitLabel) =>
+                setPrescriptionView({ prescriptionIds, visitLabel })
+              }
             />
           ) : (
             <section className="flex items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
@@ -385,6 +460,15 @@ export function PatientRecordsPage() {
             </section>
           )}
         </div>
+      )}
+
+      {prescriptionView && selectedPatient && (
+        <PrescriptionViewModal
+          prescriptionIds={prescriptionView.prescriptionIds}
+          patientName={selectedPatient.name}
+          visitLabel={prescriptionView.visitLabel}
+          onClose={() => setPrescriptionView(null)}
+        />
       )}
     </div>
   )

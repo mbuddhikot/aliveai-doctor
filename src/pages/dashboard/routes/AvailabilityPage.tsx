@@ -8,7 +8,6 @@ import {
   FiCalendar,
   FiCheck,
   FiClock,
-  FiCopy,
   FiPlus,
   FiRefreshCw,
   FiSave,
@@ -49,7 +48,6 @@ function normalizeSlotModes(modes: ConsultationMode[]): ConsultationMode[] {
 
 const SLOT_DURATIONS = [15, 20, 30, 45, 60]
 const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30]
-const BOOKING_WINDOWS = [7, 14, 30, 60, 90]
 
 function createId(): string {
   return crypto.randomUUID()
@@ -586,23 +584,6 @@ export function AvailabilityPage() {
     })
   }
 
-  const copyMondayToWeekdays = () => {
-    const monday = availability.weekly.find((day) => day.id === 'monday')
-    if (!monday) return
-
-    updateAvailability({
-      ...availability,
-      weekly: availability.weekly.map((day) => {
-        if (['saturday', 'sunday', 'monday'].includes(day.id)) return day
-        return {
-          ...day,
-          enabled: monday.enabled,
-          slots: monday.slots.map((slot) => ({ ...slot, id: createId() })),
-        }
-      }),
-    })
-  }
-
   const addException = () => {
     updateAvailability({
       ...availability,
@@ -764,16 +745,6 @@ export function AvailabilityPage() {
                 ? 'Loading saved availability...'
                 : 'Use multiple slots per day for morning, afternoon, or evening blocks.'
             }
-            action={
-              <button
-                type="button"
-                onClick={copyMondayToWeekdays}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-bold text-[#8a37ff] transition hover:bg-[#f3edff]"
-              >
-                <FiCopy className="h-4 w-4" />
-                Copy Monday
-              </button>
-            }
           >
             <div className="space-y-3">
               {availability.weekly.map((day) => (
@@ -874,15 +845,6 @@ export function AvailabilityPage() {
                 suffix="min"
                 onChange={(bufferMinutes) =>
                   updateAvailability({ ...availability, bufferMinutes })
-                }
-              />
-              <SelectField
-                label="Booking window"
-                value={availability.bookingWindowDays}
-                options={BOOKING_WINDOWS}
-                suffix="days"
-                onChange={(bookingWindowDays) =>
-                  updateAvailability({ ...availability, bookingWindowDays })
                 }
               />
             </div>

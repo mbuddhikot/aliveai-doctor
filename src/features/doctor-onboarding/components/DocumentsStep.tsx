@@ -5,9 +5,12 @@ import {
   FiCheck,
   FiChevronDown,
   FiChevronUp,
+  FiEdit2,
   FiFileText,
+  FiTrash2,
   FiUploadCloud,
 } from 'react-icons/fi'
+import { DeleteDocumentConfirmModal } from './DeleteDocumentConfirmModal'
 import {
   ALLOWED_DOCUMENT_TYPES,
   DOCUMENT_OPTIONS,
@@ -15,6 +18,12 @@ import {
   RECOMMENDED_DOC_TYPES,
 } from '../constants'
 import type { DoctorDocument, DoctorDocumentType } from '../types'
+import { DocumentPreviewModal } from './DocumentPreviewModal'
+import {
+  loadDoctorDocumentPreview,
+  revokeDoctorDocumentPreview,
+  type DoctorDocumentPreviewState,
+} from '../lib/openDocumentPreview'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
 
 type DocumentsStepProps = {
@@ -25,6 +34,14 @@ type DocumentsStepProps = {
     items: { file: File; doc_type: DoctorDocumentType }[],
     onProgress?: (current: number, total: number, docType: DoctorDocumentType) => void,
   ) => Promise<void>
+  onUpdateDocument?: (params: {
+    documentId: string
+    file: File
+    doc_type: DoctorDocumentType
+  }) => Promise<void>
+  onDeleteDocument?: (documentId: string) => Promise<void>
+  isUpdating?: boolean
+  isDeleting?: boolean
   onContinue?: () => void
   /** Hide onboarding-only “continue to review” when managing from dashboard. */
   variant?: 'onboarding' | 'dashboard'
@@ -66,14 +83,26 @@ export function DocumentsStep({
   isUploading,
   uploadError,
   onUploadBatch,
+  onUpdateDocument,
+  onDeleteDocument,
+  isUpdating = false,
+  isDeleting = false,
   onContinue,
   variant = 'onboarding',
 }: DocumentsStepProps) {
   const isDashboard = variant === 'dashboard'
+  const canManageDocuments = Boolean(onUpdateDocument || onDeleteDocument)
+  const isBusy = isUploading || isUpdating || isDeleting
   const [pendingFiles, setPendingFiles] = useState<PendingFiles>({})
   const [localError, setLocalError] = useState<string | null>(null)
   const [batchStatus, setBatchStatus] = useState<string | null>(null)
   const [showOptional, setShowOptional] = useState(false)
+  const [documentToDelete, setDocumentToDelete] = useState<DoctorDocument | null>(
+    null,
+  )
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
+  const [documentPreview, setDocumentPreview] =
+    useState<DoctorDocumentPreviewState | null>(null)
 
   const documentsByType = useMemo(() => {
     const map = new Map<DoctorDocumentType, DoctorDocument[]>()
@@ -162,6 +191,59 @@ export function DocumentsStep({
       ? extractApiErrorMessage(uploadError, 'Unable to upload documents')
       : null)
 
+  const handleUpdateDocument = async (
+    document: DoctorDocument,
+    file: File | undefined,
+  ) => {
+    if (!file || !onUpdateDocument) return
+    const message = validateFile(file)
+    if (message) {
+      setLocalError(message)
+      return
+    }
+    setLocalError(null)
+    try {
+      await onUpdateDocument({
+        documentId: document.id,
+        file,
+        doc_type: document.doc_type,
+      })
+      setBatchStatus(`${formatDocLabel(document.doc_type)} updated successfully.`)
+    } catch {
+      /* surfaced via uploadError */
+    }
+  }
+
+  const handlePreviewDocument = async (document: DoctorDocument) => {
+    setLocalError(null)
+    setPreviewingId(document.id)
+    try {
+      setDocumentPreview((current) => {
+        if (current) revokeDoctorDocumentPreview(current)
+        return null
+      })
+      const preview = await loadDoctorDocumentPreview(document)
+      setDocumentPreview(preview)
+    } catch (err) {
+      setLocalError(
+        extractApiErrorMessage(err, 'Unable to open document for preview'),
+      )
+    } finally {
+      setPreviewingId(null)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!documentToDelete || !onDeleteDocument) return
+    try {
+      await onDeleteDocument(documentToDelete.id)
+      setDocumentToDelete(null)
+      setBatchStatus('Document deleted successfully.')
+    } catch {
+      /* surfaced via uploadError */
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -210,7 +292,15 @@ export function DocumentsStep({
             required={type === REQUIRED_DOC_TYPE}
             uploaded={documentsByType.get(type) ?? []}
             pendingFile={pendingFiles[type]}
-            disabled={isUploading}
+            disabled={isBusy}
+            canManage={canManageDocuments}
+            onReplaceFile={
+              onUpdateDocument
+                ? (document, file) => handleUpdateDocument(document, file)
+                : undefined
+            }
+            previewingId={previewingId}
+            onPreview={handlePreviewDocument}
             onPickFile={(file) => handlePickFile(type, file)}
             onClearPending={() => setPendingForType(type, null)}
           />
@@ -239,7 +329,15 @@ export function DocumentsStep({
                 docType={type}
                 uploaded={documentsByType.get(type) ?? []}
                 pendingFile={pendingFiles[type]}
-                disabled={isUploading}
+                disabled={isBusy}
+                canManage={canManageDocuments}
+                onReplaceFile={
+                  onUpdateDocument
+                    ? (document, file) => handleUpdateDocument(document, file)
+                    : undefined
+                }
+                previewingId={previewingId}
+                onPreview={handlePreviewDocument}
                 onPickFile={(file) => handlePickFile(type, file)}
                 onClearPending={() => setPendingForType(type, null)}
               />
@@ -264,9 +362,9 @@ export function DocumentsStep({
       <div className="flex flex-wrap gap-3 border-t border-[#eef1f5] pt-6">
         <button
           type="button"
-          disabled={isUploading || pendingCount === 0}
+          disabled={isBusy || pendingCount === 0}
           onClick={() => void handleUploadAll()}
-          className="h-12 rounded-[10px] bg-[#8a37ff] px-6 text-sm font-bold text-white transition hover:bg-[#772cf0] disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-12 cursor-pointer rounded-[10px] bg-[#8a37ff] px-6 text-sm font-bold text-white transition hover:bg-[#772cf0] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isUploading
             ? 'Uploading…'
@@ -274,11 +372,11 @@ export function DocumentsStep({
               ? `Upload all (${pendingCount})`
               : 'Upload all'}
         </button>
-        {pendingCount > 0 && !isUploading && (
+        {pendingCount > 0 && !isBusy && (
           <button
             type="button"
             onClick={clearAllPending}
-            className="h-12 rounded-[10px] border border-[#e6e8ee] bg-white px-5 text-sm font-semibold text-[#64748b] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
+            className="h-12 cursor-pointer rounded-[10px] border border-[#e6e8ee] bg-white px-5 text-sm font-semibold text-[#64748b] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
           >
             Clear selection
           </button>
@@ -286,9 +384,9 @@ export function DocumentsStep({
         {!isDashboard && onContinue && (
           <button
             type="button"
-            disabled={!canContinue || isUploading}
+            disabled={!canContinue || isBusy}
             onClick={onContinue}
-            className="h-12 rounded-[10px] border border-[#8a37ff] bg-white px-6 text-sm font-bold text-[#8a37ff] transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-12 cursor-pointer rounded-[10px] border border-[#8a37ff] bg-white px-6 text-sm font-bold text-[#8a37ff] transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Continue to review
           </button>
@@ -302,7 +400,33 @@ export function DocumentsStep({
         </p>
       )}
 
-      <UploadedDocumentsList documents={documents} />
+      <UploadedDocumentsList
+        documents={documents}
+        canManage={canManageDocuments}
+        isBusy={isBusy}
+        previewingId={previewingId}
+        onPreview={handlePreviewDocument}
+        onUpdate={handleUpdateDocument}
+        onRequestDelete={setDocumentToDelete}
+      />
+
+      {documentToDelete && onDeleteDocument ? (
+        <DeleteDocumentConfirmModal
+          document={documentToDelete}
+          isDeleting={isDeleting}
+          onClose={() => {
+            if (!isDeleting) setDocumentToDelete(null)
+          }}
+          onConfirm={() => void handleConfirmDelete()}
+        />
+      ) : null}
+
+      {documentPreview ? (
+        <DocumentPreviewModal
+          preview={documentPreview}
+          onClose={() => setDocumentPreview(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -313,6 +437,10 @@ function DocumentTypeSlot({
   uploaded,
   pendingFile,
   disabled,
+  canManage,
+  onReplaceFile,
+  previewingId,
+  onPreview,
   onPickFile,
   onClearPending,
 }: {
@@ -321,13 +449,21 @@ function DocumentTypeSlot({
   uploaded: DoctorDocument[]
   pendingFile?: File
   disabled?: boolean
+  canManage?: boolean
+  onReplaceFile?: (document: DoctorDocument, file: File) => Promise<void>
+  previewingId?: string | null
+  onPreview?: (document: DoctorDocument) => Promise<void>
   onPickFile: (file: File | undefined) => void
   onClearPending: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const updateInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const isUploaded = uploaded.length > 0
-  const latestUpload = uploaded[uploaded.length - 1]
+  const latestUpload = [...uploaded].sort(
+    (a, b) =>
+      new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime(),
+  )[0]
 
   const onInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     onPickFile(event.target.files?.[0])
@@ -379,20 +515,40 @@ function DocumentTypeSlot({
       </div>
 
       {isUploaded && latestUpload && (
-        <a
-          href={latestUpload.gcs_url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 flex items-center gap-2 rounded-[8px] border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-800 transition hover:border-[#8a37ff]"
-        >
-          <FiFileText className="h-4 w-4 shrink-0 text-[#8a37ff]" />
-          <span className="min-w-0 truncate">
-            {latestUpload.file_name || formatDocLabel(docType)}
-          </span>
-          <span className="ml-auto shrink-0 text-xs text-[#878787]">
-            {new Date(latestUpload.uploaded_at).toLocaleDateString()}
-          </span>
-        </a>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <DocumentPreviewButton
+            document={latestUpload}
+            label={latestUpload.file_name || formatDocLabel(docType)}
+            isLoading={previewingId === latestUpload.id}
+            disabled={disabled}
+            onPreview={onPreview}
+          />
+          {canManage && onReplaceFile ? (
+            <>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => updateInputRef.current?.click()}
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] hover:text-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FiEdit2 className="h-3.5 w-3.5" />
+                Update
+              </button>
+              <input
+                ref={updateInputRef}
+                type="file"
+                className="hidden"
+                accept="application/pdf,image/jpeg,image/png"
+                disabled={disabled}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (file) void onReplaceFile(latestUpload, file)
+                }}
+              />
+            </>
+          ) : null}
+        </div>
       )}
 
       <div
@@ -447,7 +603,54 @@ function DocumentTypeSlot({
   )
 }
 
-function UploadedDocumentsList({ documents }: { documents: DoctorDocument[] }) {
+function DocumentPreviewButton({
+  document,
+  label,
+  isLoading,
+  disabled,
+  onPreview,
+}: {
+  document: DoctorDocument
+  label: string
+  isLoading?: boolean
+  disabled?: boolean
+  onPreview?: (document: DoctorDocument) => Promise<void>
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || isLoading || !onPreview}
+      onClick={() => onPreview && void onPreview(document)}
+      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[8px] border border-emerald-200 bg-white px-3 py-2 text-left text-sm font-medium text-emerald-800 transition hover:border-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <FiFileText className="h-4 w-4 shrink-0 text-[#8a37ff]" />
+      <span className="min-w-0 truncate">
+        {isLoading ? 'Opening…' : label}
+      </span>
+      <span className="ml-auto shrink-0 text-xs font-semibold text-[#8a37ff]">
+        {isLoading ? '' : 'View'}
+      </span>
+    </button>
+  )
+}
+
+function UploadedDocumentsList({
+  documents,
+  canManage,
+  isBusy,
+  previewingId,
+  onPreview,
+  onUpdate,
+  onRequestDelete,
+}: {
+  documents: DoctorDocument[]
+  canManage?: boolean
+  isBusy?: boolean
+  previewingId?: string | null
+  onPreview?: (document: DoctorDocument) => Promise<void>
+  onUpdate?: (document: DoctorDocument, file: File | undefined) => Promise<void>
+  onRequestDelete?: (document: DoctorDocument) => void
+}) {
   if (documents.length === 0) return null
 
   return (
@@ -455,29 +658,96 @@ function UploadedDocumentsList({ documents }: { documents: DoctorDocument[] }) {
       <h3 className="text-sm font-bold text-black">All uploaded documents</h3>
       <ul className="space-y-2">
         {documents.map((doc) => (
-          <li key={doc.id}>
-            <a
-              href={doc.gcs_url}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-3 rounded-[10px] border border-[#e6e8ee] bg-white px-4 py-3 transition hover:border-[#8a37ff]"
-            >
-              <FiFileText className="h-5 w-5 shrink-0 text-[#8a37ff]" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-black">
-                  {doc.file_name || 'Document'}
-                </p>
-                <p className="text-xs text-[#878787]">
-                  {formatDocLabel(doc.doc_type)}
-                </p>
-              </div>
-              <span className="shrink-0 text-xs text-[#878787]">
-                {new Date(doc.uploaded_at).toLocaleDateString()}
-              </span>
-            </a>
-          </li>
+          <DocumentListRow
+            key={doc.id}
+            doc={doc}
+            canManage={canManage}
+            isBusy={isBusy}
+            isPreviewLoading={previewingId === doc.id}
+            onPreview={onPreview}
+            onUpdate={onUpdate}
+            onRequestDelete={onRequestDelete}
+          />
         ))}
       </ul>
     </div>
+  )
+}
+
+function DocumentListRow({
+  doc,
+  canManage,
+  isBusy,
+  isPreviewLoading,
+  onPreview,
+  onUpdate,
+  onRequestDelete,
+}: {
+  doc: DoctorDocument
+  canManage?: boolean
+  isBusy?: boolean
+  isPreviewLoading?: boolean
+  onPreview?: (document: DoctorDocument) => Promise<void>
+  onUpdate?: (document: DoctorDocument, file: File | undefined) => Promise<void>
+  onRequestDelete?: (document: DoctorDocument) => void
+}) {
+  const updateInputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 rounded-[10px] border border-[#e6e8ee] bg-white px-4 py-3 sm:flex-nowrap">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+        <DocumentPreviewButton
+          document={doc}
+          label={doc.file_name || 'Document'}
+          isLoading={isPreviewLoading}
+          disabled={isBusy}
+          onPreview={onPreview}
+        />
+        <span className="px-1 text-xs text-[#878787] sm:px-0">
+          {formatDocLabel(doc.doc_type)} ·{' '}
+          {new Date(doc.uploaded_at).toLocaleDateString()}
+        </span>
+      </div>
+      {canManage ? (
+        <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+          {onUpdate ? (
+            <>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => updateInputRef.current?.click()}
+                className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] hover:text-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+              >
+                <FiEdit2 className="h-3.5 w-3.5" />
+                Update
+              </button>
+              <input
+                ref={updateInputRef}
+                type="file"
+                className="hidden"
+                accept="application/pdf,image/jpeg,image/png"
+                disabled={isBusy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  void onUpdate(doc, file)
+                }}
+              />
+            </>
+          ) : null}
+          {onRequestDelete ? (
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => onRequestDelete(doc)}
+              className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[8px] border border-red-200 bg-white px-3 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+            >
+              <FiTrash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
   )
 }

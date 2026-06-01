@@ -33,8 +33,17 @@ export type DoctorProfileCreatePayload = {
   timezone?: string | null
 }
 
-/** PUT /v1/doctor/profile — DoctorProfileUpdateRequest (partial) */
-export type DoctorProfileUpdatePayload = Partial<DoctorProfileCreatePayload>
+/** PUT /v1/doctor/profile — DoctorProfileUpdateRequest (partial; create-only fields excluded). */
+export type DoctorProfileUpdatePayload = {
+  full_name?: string | null
+  phone?: string | null
+  years_experience?: number | null
+  bio?: string | null
+  fee_amount?: number | null
+  fee_currency?: string | null
+  session_minutes?: number | null
+  timezone?: string | null
+}
 
 /** @deprecated Use DoctorProfileCreatePayload */
 export type DoctorProfilePayload = DoctorProfileCreatePayload
@@ -59,6 +68,7 @@ export type DoctorProfile = {
   profile_completed_at: string | null
   verified_at: string | null
   rejection_reason: string | null
+  documents: DoctorDocument[]
   created_at: string
   updated_at: string
 }

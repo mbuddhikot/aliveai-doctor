@@ -7,3 +7,26 @@ body {
 .form-input {
   @apply h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#8a37ff] focus:ring-4 focus:ring-violet-100;
 }
+
+.scrollbar-violet {
+  scrollbar-width: thin;
+  scrollbar-color: #c4b5fd #f1f5f9;
+}
+
+.scrollbar-violet::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-violet::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+.scrollbar-violet::-webkit-scrollbar-thumb {
+  background: #c4b5fd;
+  border-radius: 9999px;
+}
+
+.scrollbar-violet::-webkit-scrollbar-thumb:hover {
+  background: #8a37ff;
+}

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import type { IconType } from 'react-icons'
 import {
@@ -11,6 +12,7 @@ import {
 import clsx from 'clsx'
 import logoImg from '../../../assets/logo.png'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
+import { LogoutConfirmModal } from './LogoutConfirmModal'
 
 type NavItem = {
   to: string
@@ -30,6 +32,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const navigate = useNavigate()
   const { signOut } = useAuth()
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false)
 
   const handleSignOut = () => {
     signOut()
@@ -69,13 +72,19 @@ export function Sidebar() {
       <div className="shrink-0 border-t border-[#eef1f5] px-7 py-6">
         <button
           type="button"
-          onClick={handleSignOut}
+          onClick={() => setLogoutModalOpen(true)}
           className="flex min-h-[40px] w-full items-center gap-4 rounded-md px-4 text-base font-medium text-[#1f2933] transition hover:bg-red-50 hover:text-red-600"
         >
           <FiLogOut className="h-5 w-5 shrink-0 stroke-[1.9]" />
           <span>Log out</span>
         </button>
       </div>
+
+      <LogoutConfirmModal
+        isOpen={logoutModalOpen}
+        onClose={() => setLogoutModalOpen(false)}
+        onConfirm={handleSignOut}
+      />
     </aside>
   )
 }

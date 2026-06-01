@@ -5,9 +5,11 @@ import clsx from 'clsx'
 import { FiRefreshCw } from 'react-icons/fi'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
 import {
+  deleteDoctorDocument,
   getDoctorProfile,
   getDoctorVerificationStatus,
   saveDoctorProfile,
+  updateDoctorDocument,
   uploadDoctorDocument,
 } from '../../../features/doctor-onboarding/api/doctorOnboardingApi'
 import { DocumentsStep } from '../../../features/doctor-onboarding/components/DocumentsStep'
@@ -42,8 +44,9 @@ export function DoctorProfilePage() {
   const status = statusQuery.data?.verification_status ?? 'none'
   const statusMeta = STATUS_META[status]
   const profileCompleted = Boolean(statusQuery.data?.profile_completed)
-  const documents = statusQuery.data?.documents ?? []
   const savedProfile = profileQuery.data ?? null
+  const documents =
+    statusQuery.data?.documents ?? savedProfile?.documents ?? []
   const hasExistingProfile =
     profileCompleted || profileExists(savedProfile)
 
@@ -72,6 +75,20 @@ export function DoctorProfilePage() {
     },
   })
 
+  const updateDocumentMutation = useMutation({
+    mutationFn: updateDoctorDocument,
+    onSuccess: async () => {
+      await invalidateProfileData()
+    },
+  })
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: deleteDoctorDocument,
+    onSuccess: async () => {
+      await invalidateProfileData()
+    },
+  })
+
   const uploadDocumentsBatch = useCallback(
     async (
       items: { file: File; doc_type: DoctorDocumentType }[],
@@ -84,10 +101,26 @@ export function DoctorProfilePage() {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]
         onProgress?.(index + 1, items.length, item.doc_type)
-        await uploadDocumentMutation.mutateAsync(item)
+        const existing = [...documents]
+          .filter((doc) => doc.doc_type === item.doc_type)
+          .sort(
+            (a, b) =>
+              new Date(b.uploaded_at).getTime() -
+              new Date(a.uploaded_at).getTime(),
+          )[0]
+
+        if (existing) {
+          await updateDocumentMutation.mutateAsync({
+            documentId: existing.id,
+            file: item.file,
+            doc_type: item.doc_type,
+          })
+        } else {
+          await uploadDocumentMutation.mutateAsync(item)
+        }
       }
     },
-    [uploadDocumentMutation],
+    [documents, updateDocumentMutation, uploadDocumentMutation],
   )
 
   const isLoading =
@@ -209,8 +242,18 @@ export function DoctorProfilePage() {
           variant="dashboard"
           documents={documents}
           isUploading={uploadDocumentMutation.isPending}
-          uploadError={uploadDocumentMutation.error}
+          isUpdating={updateDocumentMutation.isPending}
+          uploadError={
+            uploadDocumentMutation.error ??
+            updateDocumentMutation.error ??
+            deleteDocumentMutation.error
+          }
           onUploadBatch={uploadDocumentsBatch}
+          onUpdateDocument={(params) => updateDocumentMutation.mutateAsync(params)}
+          isDeleting={deleteDocumentMutation.isPending}
+          onDeleteDocument={(documentId) =>
+            deleteDocumentMutation.mutateAsync(documentId)
+          }
         />
       </section>
     </div>

@@ -44,6 +44,8 @@ export function ProfileStepForm({
   variant = 'onboarding',
 }: ProfileStepFormProps) {
   const isDashboard = variant === 'dashboard'
+  const lockCreateOnlyFields =
+    isDashboard && (profileCompleted || Boolean(savedProfile?.id))
   const initialCountry = useMemo(
     () => resolveProfileCountry(user, savedProfile),
     [user, savedProfile],
@@ -114,6 +116,13 @@ export function ProfileStepForm({
       {isDashboard && profileLoading && (
         <p className="text-sm text-[#64748b]">Loading saved profile…</p>
       )}
+      {lockCreateOnlyFields && (
+        <p className="rounded-[10px] border border-[#e6e8ee] bg-[#fafafa] px-3 py-2 text-sm text-[#64748b]">
+          Specialization, qualifications, and registration number were set during
+          onboarding and cannot be changed here. Contact support if they need to be
+          updated.
+        </p>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <FormField label="Full name" error={errors.full_name?.message}>
@@ -160,7 +169,7 @@ export function ProfileStepForm({
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
               }}
-              disabled={profileLoading || isSaving}
+              disabled={profileLoading || isSaving || lockCreateOnlyFields}
               {...register('specialty')}
             >
               <option value="" disabled>
@@ -183,7 +192,7 @@ export function ProfileStepForm({
           <input
             className={inputClass(Boolean(errors.qualifications))}
             placeholder="MBBS, MD, DNB"
-            disabled={profileLoading || isSaving}
+            disabled={profileLoading || isSaving || lockCreateOnlyFields}
             {...register('qualifications')}
           />
         </FormField>
@@ -195,7 +204,7 @@ export function ProfileStepForm({
         >
           <input
             className={inputClass(Boolean(errors.registration_number))}
-            disabled={profileLoading || isSaving}
+            disabled={profileLoading || isSaving || lockCreateOnlyFields}
             {...register('registration_number')}
           />
         </FormField>

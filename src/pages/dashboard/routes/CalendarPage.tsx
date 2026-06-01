@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -13,18 +13,33 @@ import {
   FiSearch,
   FiUser,
   FiVideo,
+  FiX,
 } from 'react-icons/fi'
 import {
   DOCTOR_APPOINTMENTS_QUERY_KEY,
   listDoctorAppointments,
 } from '../../../features/appointments/api/appointmentsApi'
+import { isAppointmentUpcoming } from '../../../features/appointments/lib/format'
+import {
+  isConfirmedAppointment,
+  isPendingAppointment,
+} from '../../../features/calendar/lib/mapDoctorAppointment'
+import {
+  startAppointmentErrorMessage,
+  useStartAppointment,
+} from '../../../features/dashboard/hooks/useStartAppointment'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
-import { mapDoctorAppointmentsToCalendar } from '../../../features/calendar/lib/mapDoctorAppointment'
+import { extractApiErrorMessage } from '../../../lib/apiClient'
+import {
+  mapDoctorAppointmentsToCalendar,
+  type CalendarStatusFilter,
+} from '../../../features/calendar/lib/mapDoctorAppointment'
 import { DEFAULT_PROFILE_TIMEZONE } from '../../../features/doctor-onboarding/constants'
 import {
   addMonthsInZone,
   calendarMonthDayKeys,
+  calendarMonthFromDateKey,
   dayOfMonthInZone,
   doctorTodayKey,
   formatDoctorLongDate,
@@ -36,46 +51,41 @@ import {
 } from '../../../lib/doctorTimezone'
 import type {
   AppointmentMode,
-  AppointmentStatus,
   CalendarAppointment,
+  CalendarDisplayStatus,
 } from '../../../features/calendar/types'
 
 type CalendarView = 'month' | 'week' | 'day'
-type StatusFilter = 'all' | AppointmentStatus
-type ModeFilter = 'all' | AppointmentMode
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const STATUS_META: Record<
-  AppointmentStatus,
+  CalendarDisplayStatus,
   { label: string; className: string; dot: string }
 > = {
+  pending: {
+    label: 'Pending',
+    className: 'bg-amber-50 text-amber-900 border-amber-200',
+    dot: 'bg-amber-500',
+  },
+  upcoming: {
+    label: 'Upcoming',
+    className: 'bg-[#f3edff] text-[#8a37ff] border-[#decaff]',
+    dot: 'bg-[#8a37ff]',
+  },
   confirmed: {
     label: 'Confirmed',
     className: 'bg-[#ecfdf5] text-[#047857] border-[#bbf7d0]',
     dot: 'bg-[#10b981]',
   },
-  ongoing: {
-    label: 'Ongoing',
-    className: 'bg-[#f3edff] text-[#8a37ff] border-[#decaff]',
-    dot: 'bg-[#8a37ff]',
-  },
-  completed: {
-    label: 'Completed',
-    className: 'bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]',
-    dot: 'bg-[#2563eb]',
-  },
-  cancelled: {
-    label: 'Cancelled',
-    className: 'bg-[#fef2f2] text-[#dc2626] border-[#fecaca]',
-    dot: 'bg-[#ef4444]',
-  },
-  'no-show': {
-    label: 'No-show',
-    className: 'bg-[#fff7ed] text-[#c2410c] border-[#fed7aa]',
-    dot: 'bg-[#f97316]',
-  },
 }
+
+const STATUS_FILTER_OPTIONS: { value: CalendarStatusFilter; label: string }[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'confirmed', label: 'Confirmed' },
+]
 
 const MODE_META: Record<AppointmentMode, { label: string; icon: ReactNode }> = {
   video: { label: 'Video call', icon: <FiVideo className="h-4 w-4" /> },
@@ -86,17 +96,6 @@ const MODE_META: Record<AppointmentMode, { label: string; icon: ReactNode }> = {
 function minutesFromTime(time: string): number {
   const [hours, minutes] = time.split(':').map(Number)
   return hours * 60 + minutes
-}
-
-function isUpcomingInDoctorZone(
-  appointment: CalendarAppointment,
-  doctorTimezone: string,
-): boolean {
-  const local = DateTime.fromISO(`${appointment.date}T${appointment.start}`, {
-    zone: doctorTimezone,
-  })
-  if (!local.isValid) return false
-  return local.toUTC().toMillis() >= Date.now() && appointment.status !== 'cancelled'
 }
 
 function sortByTime(appointments: CalendarAppointment[]): CalendarAppointment[] {
@@ -123,7 +122,7 @@ function StatPill({
   )
 }
 
-function StatusBadge({ status }: { status: AppointmentStatus }) {
+function StatusBadge({ status }: { status: CalendarDisplayStatus }) {
   const meta = STATUS_META[status]
   return (
     <span
@@ -204,19 +203,19 @@ function AppointmentPill({
   appointment: CalendarAppointment
   onClick: () => void
 }) {
+  const meta = STATUS_META[appointment.status]
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="block w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-semibold text-[#253047] transition hover:bg-[#f3edff]"
+      className={clsx(
+        'block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-semibold transition hover:opacity-90',
+        meta.className,
+      )}
     >
       <span className="flex min-w-0 items-center gap-1.5">
-        <span
-          className={clsx(
-            'h-1.5 w-1.5 shrink-0 rounded-full',
-            STATUS_META[appointment.status].dot,
-          )}
-        />
+        <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', meta.dot)} />
         <span className="truncate">
           {appointment.start} {appointment.patientName}
         </span>
@@ -315,24 +314,35 @@ function MonthCalendar({
   )
 }
 
-function AgendaList({
+function DayAppointmentsPanel({
   title,
+  subtitle,
   appointments,
   selectedId,
   onSelect,
 }: {
   title: string
+  subtitle: string
   appointments: CalendarAppointment[]
   selectedId?: string
   onSelect: (appointment: CalendarAppointment) => void
 }) {
   return (
-    <section className="rounded-lg border border-[#dfe3ea] bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-[#edf0f4] px-3 py-2">
-        <h2 className="text-sm font-bold text-black">{title}</h2>
-        <span className="text-xs text-[#64748b]">{appointments.length} slots</span>
+    <section className="flex h-full min-h-[280px] flex-col overflow-hidden rounded-lg border border-[#dfe3ea] bg-white shadow-sm xl:min-h-0">
+      <div className="shrink-0 border-b border-[#edf0f4] px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8a37ff]">
+              {title}
+            </p>
+            <h2 className="text-sm font-bold text-black">{subtitle}</h2>
+          </div>
+          <span className="shrink-0 text-xs text-[#64748b]">
+            {appointments.length} slot{appointments.length === 1 ? '' : 's'}
+          </span>
+        </div>
       </div>
-      <div className="max-h-[200px] space-y-1.5 overflow-auto p-2 sm:max-h-[240px]">
+      <div className="scrollbar-violet min-h-0 flex-1 space-y-1.5 overflow-y-scroll overscroll-contain p-2 pr-1">
         {appointments.length > 0 ? (
           sortByTime(appointments).map((appointment) => (
             <button
@@ -370,35 +380,112 @@ function AgendaList({
   )
 }
 
-function AppointmentDetails({
+const MODAL_TRANSITION_MS = 320
+
+function SlotDetailsModal({
+  isOpen,
   appointment,
   doctorTimezone,
+  canJoinCall,
+  joinUrl,
+  isStartingCall,
+  startCallError,
+  onClose,
+  onStartCall,
 }: {
-  appointment?: CalendarAppointment
+  isOpen: boolean
+  appointment: CalendarAppointment
   doctorTimezone: string
+  canJoinCall: boolean
+  joinUrl?: string
+  isStartingCall?: boolean
+  startCallError?: string | null
+  onClose: () => void
+  onStartCall: () => void
 }) {
-  return (
-    <section className="rounded-lg border border-[#dfe3ea] bg-white shadow-sm xl:sticky xl:top-2 xl:self-start">
-      <div className="border-b border-[#edf0f4] px-3 py-2">
-        <h2 className="text-sm font-bold text-black">Slot details</h2>
-      </div>
-      {appointment ? (
-        <div className="space-y-2 p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="truncate text-base font-bold text-black">
-                {appointment.patientName}
-              </h3>
-              {appointment.patientEmail ? (
-                <p className="truncate text-xs text-[#64748b]">
-                  {appointment.patientEmail}
-                </p>
-              ) : null}
-            </div>
-            <StatusBadge status={appointment.status} />
-          </div>
+  const [mounted, setMounted] = useState(isOpen)
+  const [visible, setVisible] = useState(false)
+  const [displayed, setDisplayed] = useState(appointment)
 
-          <div className="rounded-md bg-[#f8fafc] px-2.5 py-2 text-xs">
+  useEffect(() => {
+    if (appointment) {
+      setDisplayed(appointment)
+    }
+  }, [appointment])
+
+  useEffect(() => {
+    if (isOpen) {
+      setMounted(true)
+      const frame = window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => setVisible(true))
+      })
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    setVisible(false)
+    const timer = window.setTimeout(() => setMounted(false), MODAL_TRANSITION_MS)
+    return () => window.clearTimeout(timer)
+  }, [isOpen])
+
+  if (!mounted || !displayed) {
+    return null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Close slot details"
+        className={clsx(
+          'absolute inset-0 bg-black/55 transition-opacity ease-out',
+          visible ? 'opacity-100' : 'opacity-0',
+        )}
+        style={{ transitionDuration: `${MODAL_TRANSITION_MS}ms` }}
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="slot-details-title"
+        className={clsx(
+          'relative z-10 w-full max-w-md overflow-hidden rounded-[16px] border border-[#e6e8ee] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.22)] transition-all ease-out',
+          visible
+            ? 'translate-y-0 scale-100 opacity-100'
+            : 'translate-y-3 scale-[0.98] opacity-0 sm:translate-y-2',
+        )}
+        style={{ transitionDuration: `${MODAL_TRANSITION_MS}ms` }}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[#eef1f5] px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">
+              Slot details
+            </p>
+            <h2
+              id="slot-details-title"
+              className="mt-0.5 truncate text-lg font-bold text-black"
+            >
+              {appointment.patientName}
+            </h2>
+            {appointment.patientEmail ? (
+              <p className="truncate text-sm text-[#64748b]">
+                {appointment.patientEmail}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <StatusBadge status={appointment.status} />
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[#e6e8ee] text-[#64748b] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
+            >
+              <FiX className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <div className="rounded-md bg-[#f8fafc] px-3 py-2.5 text-sm">
             <div className="font-bold text-[#111827]">
               {formatDoctorLongDate(appointment.date, doctorTimezone)}
             </div>
@@ -406,13 +493,13 @@ function AppointmentDetails({
               {formatWallClockTime(appointment.start)} –{' '}
               {formatWallClockTime(appointment.end)}
             </div>
-            <div className="mt-1 inline-flex items-center gap-1 text-[#64748b]">
+            <div className="mt-1.5 inline-flex items-center gap-1.5 text-[#64748b]">
               {MODE_META[appointment.mode].icon}
               {MODE_META[appointment.mode].label}
             </div>
           </div>
 
-          <div className="rounded-md bg-[#f8fafc] px-2.5 py-2 text-xs">
+          <div className="rounded-md bg-[#f8fafc] px-3 py-2.5 text-sm">
             <div className="font-semibold text-[#64748b]">Reason</div>
             <div className="font-bold text-[#111827]">{appointment.reason}</div>
             {appointment.notes ? (
@@ -420,29 +507,38 @@ function AppointmentDetails({
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className="h-8 rounded-md border border-[#dfe3ea] bg-white text-xs font-bold text-[#253047] transition hover:bg-[#f8fafc]"
-            >
-              Reschedule
-            </button>
-            <button
-              type="button"
-              className="h-8 rounded-md bg-[#8a37ff] text-xs font-bold text-white transition hover:bg-[#772cf0]"
-            >
-              Start visit
-            </button>
-          </div>
+          {startCallError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {startCallError}
+            </p>
+          ) : null}
+
+          {canJoinCall ? (
+            joinUrl ? (
+              <a
+                href={joinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] bg-[#111827] text-sm font-bold text-white transition hover:bg-black"
+              >
+                <FiVideo className="h-4 w-4" />
+                Join call
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled={isStartingCall}
+                onClick={onStartCall}
+                className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] bg-[#111827] text-sm font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FiVideo className="h-4 w-4" />
+                {isStartingCall ? 'Starting…' : 'Join call'}
+              </button>
+            )
+          ) : null}
         </div>
-      ) : (
-        <div className="p-3">
-          <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] px-3 py-4 text-center text-xs text-[#64748b]">
-            Select a slot for details.
-          </div>
-        </div>
-      )}
-    </section>
+      </div>
+    </div>
   )
 }
 
@@ -510,9 +606,14 @@ export function CalendarPage() {
   )
   const [view, setView] = useState<CalendarView>('month')
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<CalendarStatusFilter>('all')
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>()
+  const [slotDetailOpen, setSlotDetailOpen] = useState(false)
+  const [modalAppointment, setModalAppointment] =
+    useState<CalendarAppointment | null>(null)
+  const [startCallError, setStartCallError] = useState<string | null>(null)
+
+  const startCallMutation = useStartAppointment()
 
   const appointmentsQuery = useQuery({
     queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
@@ -529,6 +630,8 @@ export function CalendarPage() {
     [appointmentsQuery.data?.data, doctorTimezone],
   )
 
+  const rawAppointments = appointmentsQuery.data?.data ?? []
+
   const appointments = useMemo(() => {
     const query = search.trim().toLowerCase()
     return sourceAppointments.filter((appointment) => {
@@ -538,10 +641,9 @@ export function CalendarPage() {
         appointment.reason.toLowerCase().includes(query)
       const matchesStatus =
         statusFilter === 'all' || appointment.status === statusFilter
-      const matchesMode = modeFilter === 'all' || appointment.mode === modeFilter
-      return matchesSearch && matchesStatus && matchesMode
+      return matchesSearch && matchesStatus
     })
-  }, [modeFilter, search, sourceAppointments, statusFilter])
+  }, [search, sourceAppointments, statusFilter])
 
   const appointmentsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarAppointment[]>()
@@ -555,34 +657,121 @@ export function CalendarPage() {
   }, [appointments])
 
   const selectedDayAppointments = appointmentsByDate.get(selectedDate) || []
+
+  useEffect(() => {
+    if (selectedDayAppointments.length === 0) {
+      setSelectedAppointmentId(undefined)
+      return
+    }
+    if (
+      !selectedAppointmentId ||
+      !selectedDayAppointments.some((item) => item.id === selectedAppointmentId)
+    ) {
+      setSelectedAppointmentId(selectedDayAppointments[0].id)
+    }
+  }, [selectedDayAppointments, selectedAppointmentId, statusFilter])
+
   const selectedAppointment =
     appointments.find((item) => item.id === selectedAppointmentId) ||
     selectedDayAppointments[0]
+
+  const selectedDoctorAppointment = useMemo(() => {
+    if (!selectedAppointment?.id) return undefined
+    return rawAppointments.find((item) => item.id === selectedAppointment.id)
+  }, [rawAppointments, selectedAppointment?.id])
+
+  const isSelectedPending = Boolean(
+    selectedDoctorAppointment &&
+      isPendingAppointment(selectedDoctorAppointment),
+  )
+
+  const canJoinCall = Boolean(
+    selectedDoctorAppointment &&
+      !isSelectedPending &&
+      isConfirmedAppointment(selectedDoctorAppointment) &&
+      isAppointmentUpcoming(selectedDoctorAppointment),
+  )
+
+  const joinUrl =
+    selectedDoctorAppointment?.join_url?.trim() ||
+    selectedAppointment?.joinUrl ||
+    undefined
 
   const todayKey = doctorTodayKey(doctorTimezone)
   const todayAppointments = appointments.filter(
     (appointment) => appointment.date === todayKey,
   )
-  const upcomingAppointments = appointments.filter((appointment) =>
-    isUpcomingInDoctorZone(appointment, doctorTimezone),
+
+  const statusCounts = useMemo(
+    () => ({
+      pending: sourceAppointments.filter((item) => item.status === 'pending')
+        .length,
+      upcoming: sourceAppointments.filter((item) => item.status === 'upcoming')
+        .length,
+      confirmed: sourceAppointments.filter((item) => item.status === 'confirmed')
+        .length,
+    }),
+    [sourceAppointments],
   )
-  const confirmedCount = appointments.length
+
+  const todayMonth = useMemo(
+    () => calendarMonthFromDateKey(todayKey, doctorTimezone),
+    [todayKey, doctorTimezone],
+  )
+
+  const isViewingToday =
+    selectedDate === todayKey &&
+    calendarMonth.year === todayMonth.year &&
+    calendarMonth.month === todayMonth.month
+
+  const visibleMonthLabel = formatDoctorMonthYear(
+    calendarMonth.year,
+    calendarMonth.month,
+    doctorTimezone,
+  )
+
+  const selectedDayLabel = formatDoctorLongDate(selectedDate, doctorTimezone)
+
+  const selectedDayMonth = calendarMonthFromDateKey(
+    selectedDate,
+    doctorTimezone,
+  )
+  const dayPanelTitle =
+    selectedDate === todayKey
+      ? 'Today'
+      : formatDoctorMonthYear(
+          selectedDayMonth.year,
+          selectedDayMonth.month,
+          doctorTimezone,
+        )
 
   const goToToday = () => {
     const todayKeyValue = doctorTodayKey(doctorTimezone)
-    setCalendarMonth(initialCalendarMonth(doctorTimezone))
+    setCalendarMonth(calendarMonthFromDateKey(todayKeyValue, doctorTimezone))
     setSelectedDate(todayKeyValue)
     setSelectedAppointmentId(undefined)
+    setSlotDetailOpen(false)
+    setView('month')
   }
 
   const selectDate = (date: string) => {
+    setCalendarMonth(calendarMonthFromDateKey(date, doctorTimezone))
     setSelectedDate(date)
     setSelectedAppointmentId(undefined)
+    setSlotDetailOpen(false)
   }
 
   const selectAppointment = (appointment: CalendarAppointment) => {
     setSelectedDate(appointment.date)
     setSelectedAppointmentId(appointment.id)
+    setModalAppointment(appointment)
+    setStartCallError(null)
+    setSlotDetailOpen(true)
+  }
+
+  const closeSlotDetail = () => {
+    setSlotDetailOpen(false)
+    setStartCallError(null)
   }
 
   if (doctorIdLoading) {
@@ -601,8 +790,8 @@ export function CalendarPage() {
           Complete your doctor profile first
         </h2>
         <p className="mt-2 text-sm text-amber-900">
-          Your calendar shows confirmed upcoming visits after onboarding is
-          complete.
+          Your calendar shows pending, upcoming, and confirmed visits after
+          onboarding is complete.
         </p>
       </section>
     )
@@ -623,13 +812,18 @@ export function CalendarPage() {
                 icon={<FiClock className="h-3.5 w-3.5" />}
               />
               <StatPill
+                label="pending"
+                value={String(statusCounts.pending)}
+                icon={<FiAlertCircle className="h-3.5 w-3.5" />}
+              />
+              <StatPill
                 label="upcoming"
-                value={String(upcomingAppointments.length)}
+                value={String(statusCounts.upcoming)}
                 icon={<FiCalendar className="h-3.5 w-3.5" />}
               />
               <StatPill
                 label="confirmed"
-                value={String(confirmedCount)}
+                value={String(statusCounts.confirmed)}
                 icon={<FiUser className="h-3.5 w-3.5" />}
               />
             </div>
@@ -650,7 +844,12 @@ export function CalendarPage() {
             <button
               type="button"
               onClick={goToToday}
-              className="h-7 rounded-md border border-[#dfe3ea] bg-white px-2.5 text-[11px] font-bold text-[#253047] hover:bg-[#f8fafc]"
+              className={clsx(
+                'h-7 rounded-md border px-2.5 text-[11px] font-bold transition',
+                isViewingToday
+                  ? 'border-[#8a37ff] bg-[#f3edff] text-[#8a37ff]'
+                  : 'border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]',
+              )}
             >
               Today
             </button>
@@ -676,37 +875,39 @@ export function CalendarPage() {
             search={search}
             onSearchChange={setSearch}
           />
-          <div className="flex shrink-0 gap-1.5">
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as StatusFilter)
-              }
-              className="h-8 min-w-0 flex-1 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[112px] sm:flex-none"
-            >
-              <option value="all">All statuses</option>
-              {Object.entries(STATUS_META).map(([status, meta]) => (
-                <option key={status} value={status}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={modeFilter}
-              onChange={(event) => setModeFilter(event.target.value as ModeFilter)}
-              className="h-8 min-w-0 flex-1 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[100px] sm:flex-none"
-            >
-              <option value="all">All modes</option>
-              {Object.entries(MODE_META).map(([mode, meta]) => (
-                <option key={mode} value={mode}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as CalendarStatusFilter)
+            }
+            className="h-8 w-full shrink-0 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[128px]"
+          >
+            {STATUS_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+          {(Object.keys(STATUS_META) as CalendarDisplayStatus[]).map((status) => (
+            <span
+              key={status}
+              className="inline-flex items-center gap-1.5 text-[#64748b]"
+            >
+              <span
+                className={clsx(
+                  'h-2 w-2 rounded-full',
+                  STATUS_META[status].dot,
+                )}
+              />
+              {STATUS_META[status].label}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
           <span className="font-bold text-black">
             {formatDoctorMonthYear(
               calendarMonth.year,
@@ -738,8 +939,8 @@ export function CalendarPage() {
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="space-y-2">
+      <div className="grid min-h-[min(560px,calc(100dvh-14rem))] grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-h-0">
           {view === 'month' ? (
             <MonthCalendar
               visibleYear={calendarMonth.year}
@@ -750,21 +951,48 @@ export function CalendarPage() {
               onSelectDate={selectDate}
               onSelectAppointment={selectAppointment}
             />
-          ) : null}
+          ) : (
+            <DayAppointmentsPanel
+              title={visibleMonthLabel}
+              subtitle={selectedDayLabel}
+              appointments={selectedDayAppointments}
+              selectedId={selectedAppointment?.id}
+              onSelect={selectAppointment}
+            />
+          )}
+        </div>
 
-          <AgendaList
-            title={view === 'day' ? 'Day schedule' : 'Selected day'}
+        {view === 'month' ? (
+          <DayAppointmentsPanel
+            title={dayPanelTitle}
+            subtitle={selectedDayLabel}
             appointments={selectedDayAppointments}
             selectedId={selectedAppointment?.id}
             onSelect={selectAppointment}
           />
-        </div>
-
-        <AppointmentDetails
-          appointment={selectedAppointment}
-          doctorTimezone={doctorTimezone}
-        />
+        ) : null}
       </div>
+
+      {modalAppointment ? (
+        <SlotDetailsModal
+          isOpen={slotDetailOpen}
+          appointment={modalAppointment}
+          doctorTimezone={doctorTimezone}
+          canJoinCall={canJoinCall}
+          joinUrl={joinUrl}
+          isStartingCall={startCallMutation.isPending}
+          startCallError={startCallError}
+          onClose={closeSlotDetail}
+          onStartCall={() => {
+            if (!selectedDoctorAppointment) return
+            setStartCallError(null)
+            startCallMutation.mutate(selectedDoctorAppointment.id, {
+              onError: (err) =>
+                setStartCallError(startAppointmentErrorMessage(err)),
+            })
+          }}
+        />
+      ) : null}
     </div>
   )
 }

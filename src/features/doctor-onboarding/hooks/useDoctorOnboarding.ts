@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/hooks/useAuth'
 import {
+  deleteDoctorDocument,
   getDoctorProfile,
   getDoctorVerificationStatus,
   saveDoctorProfile,
+  updateDoctorDocument,
   uploadDoctorDocument,
 } from '../api/doctorOnboardingApi'
 import type { OnboardingStep } from '../constants'
@@ -138,6 +140,20 @@ export function useDoctorOnboarding() {
   const canOpenReview =
     profileCompleted && documentsUploaded > 0 && hasLicenseDocument
 
+  const updateDocumentMutation = useMutation({
+    mutationFn: updateDoctorDocument,
+    onSuccess: async () => {
+      await invalidateOnboardingQueries()
+    },
+  })
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: deleteDoctorDocument,
+    onSuccess: async () => {
+      await invalidateOnboardingQueries()
+    },
+  })
+
   const uploadDocumentsBatch = useCallback(
     async (
       items: { file: File; doc_type: DoctorDocumentType }[],
@@ -150,10 +166,26 @@ export function useDoctorOnboarding() {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]
         onProgress?.(index + 1, items.length, item.doc_type)
-        await uploadDocumentMutation.mutateAsync(item)
+        const existing = [...documents]
+          .filter((doc) => doc.doc_type === item.doc_type)
+          .sort(
+            (a, b) =>
+              new Date(b.uploaded_at).getTime() -
+              new Date(a.uploaded_at).getTime(),
+          )[0]
+
+        if (existing) {
+          await updateDocumentMutation.mutateAsync({
+            documentId: existing.id,
+            file: item.file,
+            doc_type: item.doc_type,
+          })
+        } else {
+          await uploadDocumentMutation.mutateAsync(item)
+        }
       }
     },
-    [uploadDocumentMutation],
+    [documents, updateDocumentMutation, uploadDocumentMutation],
   )
 
   const isBootstrapping =
@@ -180,6 +212,8 @@ export function useDoctorOnboarding() {
     statusQuery,
     saveProfileMutation,
     uploadDocumentMutation,
+    updateDocumentMutation,
+    deleteDocumentMutation,
     uploadDocumentsBatch,
   }
 }

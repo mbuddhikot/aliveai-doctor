@@ -5,14 +5,59 @@ import {
   isAppointmentUpcoming,
 } from '../../appointments/lib/format'
 import type { DoctorAppointment } from '../../appointments/types'
-import type { CalendarAppointment } from '../types'
+import type { CalendarAppointment, CalendarDisplayStatus } from '../types'
+
+export type CalendarStatusFilter = 'all' | CalendarDisplayStatus
+
+export function isPendingAppointment(appointment: DoctorAppointment): boolean {
+  return (
+    appointment.doctor_status === 'pending' ||
+    appointment.workflow_status === 'pending'
+  )
+}
+
+export function isConfirmedAppointment(appointment: DoctorAppointment): boolean {
+  return (
+    appointment.doctor_status === 'confirm' ||
+    appointment.workflow_status === 'confirmed'
+  )
+}
+
+/** Mutually exclusive calendar color — used for pills, badges, and filters. */
+export function calendarDisplayStatus(
+  appointment: DoctorAppointment,
+): CalendarDisplayStatus {
+  if (isPendingAppointment(appointment)) return 'pending'
+  if (isConfirmedAppointment(appointment)) return 'confirmed'
+  if (
+    appointment.status === 'upcoming' ||
+    appointment.doctor_status === 'postponed' ||
+    isAppointmentUpcoming(appointment)
+  ) {
+    return 'upcoming'
+  }
+  return 'upcoming'
+}
 
 export function isCalendarEligible(appointment: DoctorAppointment): boolean {
-  return (
-    appointment.workflow_status === 'confirmed' &&
-    appointment.status === 'upcoming' &&
-    isAppointmentUpcoming(appointment)
-  )
+  if (
+    appointment.status === 'cancelled' ||
+    appointment.workflow_status === 'reject' ||
+    appointment.doctor_status === 'cancelled'
+  ) {
+    return false
+  }
+
+  const status = calendarDisplayStatus(appointment)
+  return status === 'pending' || status === 'confirmed' || status === 'upcoming'
+}
+
+export function matchesCalendarStatusFilter(
+  appointment: DoctorAppointment,
+  filter: CalendarStatusFilter,
+): boolean {
+  if (filter === 'all') return true
+  return calendarDisplayStatus(appointment) === filter
 }
 
 export function doctorAppointmentToCalendar(
@@ -34,10 +79,11 @@ export function doctorAppointmentToCalendar(
     date,
     start,
     end,
-    status: 'confirmed',
+    status: calendarDisplayStatus(appointment),
     mode: 'video',
     reason: appointment.issue?.trim() || 'Consultation',
     notes: appointment.video_message ?? undefined,
+    joinUrl: appointment.join_url?.trim() || undefined,
   }
 }
 

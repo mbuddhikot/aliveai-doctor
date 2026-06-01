@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -43,6 +43,58 @@ import { PrescriptionViewModal } from '../../../features/prescriptions/component
 import { findPrescriptionsForVisit } from '../../../features/prescriptions/lib/findPrescriptionsForVisit'
 import type { Prescription } from '../../../features/prescriptions/types'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
+
+const PATIENTS_PAGE_SIZE = 10
+
+function PatientsPagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  disabled,
+}: {
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+  disabled?: boolean
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1)
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1)
+  const rangeStart = total === 0 ? 0 : safePage * pageSize + 1
+  const rangeEnd = Math.min((safePage + 1) * pageSize, total)
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[#edf0f4] bg-white px-3 py-2">
+      <p className="text-xs text-[#64748b]">
+        {total === 0
+          ? 'No results'
+          : `Showing ${rangeStart}–${rangeEnd} of ${total}`}
+      </p>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={disabled || safePage <= 0}
+          onClick={() => onPageChange(safePage - 1)}
+          className="h-8 cursor-pointer rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span className="min-w-[4.5rem] text-center text-xs font-semibold text-[#64748b]">
+          Page {safePage + 1} / {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={disabled || safePage >= totalPages - 1}
+          onClick={() => onPageChange(safePage + 1)}
+          className="h-8 cursor-pointer rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function StatPill({
   label,
@@ -255,7 +307,7 @@ function PatientDetailPanel({
         </Link>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
         <h3 className="text-sm font-bold text-black">Visit history</h3>
         <div className="mt-3 space-y-2">
           {patient.appointments.map((appointment) => (
@@ -282,9 +334,22 @@ export function PatientRecordsPage() {
     useDoctorId()
   const { doctorTimezone: profileTimezone } = useDoctorTimezone()
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(0)
   const [selectedKey, setSelectedKey] = useState<string>()
   const [prescriptionView, setPrescriptionView] =
     useState<PrescriptionViewState>(null)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    setPage(0)
+  }, [debouncedSearch])
 
   const appointmentsQuery = useQuery({
     queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
@@ -300,13 +365,38 @@ export function PatientRecordsPage() {
 
   const allPrescriptions = prescriptionsQuery.data?.data ?? []
 
-  const patients = useMemo(() => {
+  const allPatients = useMemo(() => {
     const list = buildPatientDirectory(appointmentsQuery.data?.data ?? [])
-    return filterPatients(list, search)
-  }, [appointmentsQuery.data?.data, search])
+    return filterPatients(list, debouncedSearch)
+  }, [appointmentsQuery.data?.data, debouncedSearch])
 
-  const selectedPatient =
-    patients.find((p) => p.key === selectedKey) ?? patients[0]
+  const totalPatients = allPatients.length
+
+  const paginatedPatients = useMemo(() => {
+    const start = page * PATIENTS_PAGE_SIZE
+    return allPatients.slice(start, start + PATIENTS_PAGE_SIZE)
+  }, [allPatients, page])
+
+  useEffect(() => {
+    if (paginatedPatients.length === 0) {
+      setSelectedKey(undefined)
+      return
+    }
+    if (
+      !selectedKey ||
+      !paginatedPatients.some((patient) => patient.key === selectedKey)
+    ) {
+      setSelectedKey(paginatedPatients[0].key)
+    }
+  }, [paginatedPatients, selectedKey])
+
+  const selectedPatient = useMemo(() => {
+    if (selectedKey) {
+      const match = allPatients.find((patient) => patient.key === selectedKey)
+      if (match) return match
+    }
+    return paginatedPatients[0]
+  }, [allPatients, paginatedPatients, selectedKey])
 
   const stats = useMemo(() => {
     const all = buildPatientDirectory(appointmentsQuery.data?.data ?? [])
@@ -347,7 +437,7 @@ export function PatientRecordsPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-7.25rem)] flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto xl:overflow-hidden">
       <section className="shrink-0 rounded-[10px] border border-[#dfe3ea] bg-white px-3 py-2.5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -386,7 +476,7 @@ export function PatientRecordsPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or email"
+              placeholder="Search by name"
               className="h-8 w-full rounded-[8px] border border-[#dfe3ea] bg-white pl-8 pr-2 text-sm outline-none focus:border-[#8a37ff]"
             />
           </label>
@@ -394,11 +484,11 @@ export function PatientRecordsPage() {
       </section>
 
       {appointmentsQuery.isLoading ? (
-        <div className="flex flex-1 items-center justify-center rounded-[10px] border border-[#dfe3ea] bg-white text-sm font-medium text-[#64748b]">
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-[10px] border border-[#dfe3ea] bg-white text-sm font-medium text-[#64748b]">
           Loading patient records…
         </div>
       ) : appointmentsQuery.isError ? (
-        <section className="flex flex-1 items-center justify-center rounded-[10px] border border-red-200 bg-red-50 p-6 text-center">
+        <section className="flex min-h-0 flex-1 items-center justify-center rounded-[10px] border border-red-200 bg-red-50 p-6 text-center">
           <div>
             <p className="text-sm text-red-700">
               {extractApiErrorMessage(
@@ -415,50 +505,68 @@ export function PatientRecordsPage() {
             </button>
           </div>
         </section>
-      ) : patients.length === 0 ? (
-        <section className="flex flex-1 flex-col items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white px-6 py-16 text-center">
+      ) : totalPatients === 0 ? (
+        <section className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white px-6 py-16 text-center">
           <FiUsers className="h-10 w-10 text-[#8a37ff]" />
           <h2 className="mt-4 text-lg font-bold text-black">No patients yet</h2>
           <p className="mt-2 max-w-md text-sm text-[#64748b]">
-            {search.trim()
+            {debouncedSearch
               ? 'No patients match your search.'
               : 'Patients appear here after they book an appointment with you.'}
           </p>
         </section>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,38%)]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#dfe3ea] bg-[#fafafa]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,38%)] xl:grid-rows-1 xl:overflow-hidden">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#dfe3ea] bg-[#fafafa] xl:h-full">
             <div className="shrink-0 border-b border-[#edf0f4] bg-white px-3 py-2">
               <h2 className="text-sm font-bold text-black">
-                {patients.length} patient{patients.length === 1 ? '' : 's'}
+                {totalPatients} patient{totalPatients === 1 ? '' : 's'}
               </h2>
             </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-              {patients.map((patient) => (
-                <PatientListItem
-                  key={patient.key}
-                  patient={patient}
-                  isSelected={selectedPatient?.key === patient.key}
-                  onSelect={() => setSelectedKey(patient.key)}
-                />
-              ))}
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
+              {paginatedPatients.length > 0 ? (
+                paginatedPatients.map((patient) => (
+                  <PatientListItem
+                    key={patient.key}
+                    patient={patient}
+                    isSelected={selectedPatient?.key === patient.key}
+                    onSelect={() => setSelectedKey(patient.key)}
+                  />
+                ))
+              ) : (
+                <div className="rounded-[10px] border border-dashed border-[#cfd6e1] bg-white px-4 py-10 text-center">
+                  <FiUsers className="mx-auto h-8 w-8 text-[#8a37ff]" />
+                  <p className="mt-3 text-sm font-bold text-black">
+                    No patients on this page
+                  </p>
+                </div>
+              )}
             </div>
+            <PatientsPagination
+              page={page}
+              pageSize={PATIENTS_PAGE_SIZE}
+              total={totalPatients}
+              disabled={appointmentsQuery.isFetching}
+              onPageChange={setPage}
+            />
           </section>
 
-          {selectedPatient ? (
-            <PatientDetailPanel
-              patient={selectedPatient}
-              profileTimezone={profileTimezone}
-              allPrescriptions={allPrescriptions}
-              onViewPrescription={(prescriptionIds, visitLabel) =>
-                setPrescriptionView({ prescriptionIds, visitLabel })
-              }
-            />
-          ) : (
-            <section className="flex items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
-              Select a patient to view visit history.
-            </section>
-          )}
+          <div className="flex min-h-0 flex-col overflow-hidden xl:h-full">
+            {selectedPatient ? (
+              <PatientDetailPanel
+                patient={selectedPatient}
+                profileTimezone={profileTimezone}
+                allPrescriptions={allPrescriptions}
+                onViewPrescription={(prescriptionIds, visitLabel) =>
+                  setPrescriptionView({ prescriptionIds, visitLabel })
+                }
+              />
+            ) : (
+              <section className="flex h-full min-h-0 items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
+                Select a patient to view visit history.
+              </section>
+            )}
+          </div>
         </div>
       )}
 

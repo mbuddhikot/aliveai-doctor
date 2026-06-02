@@ -37,6 +37,7 @@ import {
 } from '../../../features/calendar/lib/mapDoctorAppointment'
 import { DEFAULT_PROFILE_TIMEZONE } from '../../../features/doctor-onboarding/constants'
 import {
+  addDaysToDateKey,
   addMonthsInZone,
   calendarMonthDayKeys,
   calendarMonthFromDateKey,
@@ -102,6 +103,19 @@ function sortByTime(appointments: CalendarAppointment[]): CalendarAppointment[] 
   return [...appointments].sort(
     (a, b) => minutesFromTime(a.start) - minutesFromTime(b.start),
   )
+}
+
+function formatWeekRangeLabel(dateKey: string, timezone: string): string {
+  const days = weekDayKeysAround(dateKey, timezone)
+  const start = DateTime.fromISO(days[0], { zone: timezone })
+  const end = DateTime.fromISO(days[6], { zone: timezone })
+  if (start.month === end.month) {
+    return `${start.toFormat('LLL d')} – ${end.toFormat('d, yyyy')}`
+  }
+  if (start.year === end.year) {
+    return `${start.toFormat('LLL d')} – ${end.toFormat('LLL d, yyyy')}`
+  }
+  return `${start.toFormat('LLL d, yyyy')} – ${end.toFormat('LLL d, yyyy')}`
 }
 
 function StatPill({
@@ -714,15 +728,33 @@ export function CalendarPage() {
     [sourceAppointments],
   )
 
-  const todayMonth = useMemo(
-    () => calendarMonthFromDateKey(todayKey, doctorTimezone),
-    [todayKey, doctorTimezone],
-  )
+  const isOnToday = useMemo(() => {
+    if (view === 'month') {
+      const todayDt = DateTime.fromISO(todayKey, { zone: doctorTimezone })
+      return (
+        calendarMonth.year === todayDt.year &&
+        calendarMonth.month === todayDt.month
+      )
+    }
+    if (view === 'week') {
+      return weekDayKeysAround(selectedDate, doctorTimezone).includes(todayKey)
+    }
+    return selectedDate === todayKey
+  }, [view, calendarMonth, selectedDate, todayKey, doctorTimezone])
 
-  const isViewingToday =
-    selectedDate === todayKey &&
-    calendarMonth.year === todayMonth.year &&
-    calendarMonth.month === todayMonth.month
+  const navLabel = useMemo(() => {
+    if (view === 'month') {
+      return formatDoctorMonthYear(
+        calendarMonth.year,
+        calendarMonth.month,
+        doctorTimezone,
+      )
+    }
+    if (view === 'week') {
+      return formatWeekRangeLabel(selectedDate, doctorTimezone)
+    }
+    return formatDoctorLongDate(selectedDate, doctorTimezone)
+  }, [view, calendarMonth, selectedDate, doctorTimezone])
 
   const visibleMonthLabel = formatDoctorMonthYear(
     calendarMonth.year,
@@ -752,6 +784,54 @@ export function CalendarPage() {
     setSelectedAppointmentId(undefined)
     setSlotDetailOpen(false)
     setView('month')
+  }
+
+  const navigatePrev = () => {
+    if (view === 'month') {
+      setCalendarMonth((prev) =>
+        addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
+      )
+      return
+    }
+    if (view === 'week') {
+      const newDate = addDaysToDateKey(selectedDate, -7, doctorTimezone)
+      setSelectedDate(newDate)
+      setSelectedAppointmentId(undefined)
+      setSlotDetailOpen(false)
+      const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+      if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+      return
+    }
+    const newDate = addDaysToDateKey(selectedDate, -1, doctorTimezone)
+    setSelectedDate(newDate)
+    setSelectedAppointmentId(undefined)
+    setSlotDetailOpen(false)
+    const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+    if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+  }
+
+  const navigateNext = () => {
+    if (view === 'month') {
+      setCalendarMonth((prev) =>
+        addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
+      )
+      return
+    }
+    if (view === 'week') {
+      const newDate = addDaysToDateKey(selectedDate, 7, doctorTimezone)
+      setSelectedDate(newDate)
+      setSelectedAppointmentId(undefined)
+      setSlotDetailOpen(false)
+      const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+      if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
+      return
+    }
+    const newDate = addDaysToDateKey(selectedDate, 1, doctorTimezone)
+    setSelectedDate(newDate)
+    setSelectedAppointmentId(undefined)
+    setSlotDetailOpen(false)
+    const dt = DateTime.fromISO(newDate, { zone: doctorTimezone })
+    if (dt.isValid) setCalendarMonth({ year: dt.year, month: dt.month })
   }
 
   const selectDate = (date: string) => {
@@ -831,40 +911,32 @@ export function CalendarPage() {
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() =>
-                setCalendarMonth((prev) =>
-                  addMonthsInZone(prev.year, prev.month, -1, doctorTimezone),
-                )
-              }
+              onClick={navigatePrev}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
-              aria-label="Previous month"
+              aria-label="Previous"
             >
               <FiChevronLeft className="h-3.5 w-3.5" />
             </button>
+            <span className="hidden min-w-[120px] text-center text-xs font-bold text-black sm:inline">
+              {navLabel}
+            </span>
             <button
               type="button"
-              onClick={goToToday}
-              className={clsx(
-                'h-7 rounded-md border px-2.5 text-[11px] font-bold transition',
-                isViewingToday
-                  ? 'border-[#8a37ff] bg-[#f3edff] text-[#8a37ff]'
-                  : 'border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]',
-              )}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setCalendarMonth((prev) =>
-                  addMonthsInZone(prev.year, prev.month, 1, doctorTimezone),
-                )
-              }
+              onClick={navigateNext}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
-              aria-label="Next month"
+              aria-label="Next"
             >
               <FiChevronRight className="h-3.5 w-3.5" />
             </button>
+            {!isOnToday ? (
+              <button
+                type="button"
+                onClick={goToToday}
+                className="h-7 rounded-md border border-[#dfe3ea] bg-white px-2.5 text-[11px] font-bold text-[#253047] transition hover:bg-[#f8fafc]"
+              >
+                Today
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -907,14 +979,8 @@ export function CalendarPage() {
           ))}
         </div>
 
-        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
-          <span className="font-bold text-black">
-            {formatDoctorMonthYear(
-              calendarMonth.year,
-              calendarMonth.month,
-              doctorTimezone,
-            )}
-          </span>
+        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs sm:hidden">
+          <span className="font-bold text-black">{navLabel}</span>
           <span className="text-[#64748b]">
             {formatDoctorLongDate(selectedDate, doctorTimezone)}
           </span>

@@ -12,7 +12,7 @@ import { DashboardHomePage } from '../../pages/dashboard/routes/DashboardHomePag
 import { CalendarPage } from '../../pages/dashboard/routes/CalendarPage'
 import { MyAppointmentsPage } from '../../pages/dashboard/routes/MyAppointmentsPage'
 import { AvailabilityPage } from '../../pages/dashboard/routes/AvailabilityPage'
-import { ComingSoonPage } from '../../pages/dashboard/routes/ComingSoonPage'
+// import { ComingSoonPage } from '../../pages/dashboard/routes/ComingSoonPage'
 import { PatientRecordsPage } from '../../pages/dashboard/routes/PatientRecordsPage'
 import { DoctorProfilePage } from '../../pages/dashboard/routes/DoctorProfilePage'
 import { DoctorOnboardingPage } from '../../pages/doctor-onboarding/DoctorOnboardingPage'

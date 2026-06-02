@@ -51,7 +51,7 @@ export function DashboardMetricCard({
   return (
     <article
       className={clsx(
-        'rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md',
+        'rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-[1px] hover:border-slate-300 hover:shadow-[0_14px_28px_rgba(15,23,42,0.09)]',
         className,
       )}
     >
@@ -60,7 +60,7 @@ export function DashboardMetricCard({
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
             {title}
           </p>
-          <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+          <p className="mt-2 text-[2rem] font-bold tracking-tight text-slate-900">
             {value}
           </p>
           {subtitle && (

@@ -5,8 +5,6 @@ import clsx from 'clsx'
 import {
   FiActivity,
   FiAlertCircle,
-  FiArrowUp,
-  FiBarChart2,
   FiCalendar,
   FiCheckCircle,
   FiClock,
@@ -17,15 +15,14 @@ import {
 import {
   appointmentDoctorTimezone,
   formatAppointmentDateTime,
-  formatFee,
   isAppointmentUpcoming,
 } from '../../../features/appointments/lib/format'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import type { DoctorAppointment } from '../../../features/appointments/types'
-import { AnalyticsModal } from '../../../features/dashboard/components/AnalyticsModal'
+import { DashboardAnalyticsStrip } from '../../../features/dashboard/components/DashboardAnalyticsStrip'
 import { DashboardHero } from '../../../features/dashboard/components/DashboardHero'
 import { DashboardMetricCard } from '../../../features/dashboard/components/DashboardMetricCard'
-import { DashboardSparkline } from '../../../features/dashboard/components/DashboardSparkline'
+import { DashboardPatientsStrip } from '../../../features/dashboard/components/DashboardPatientsStrip'
 import { UpcomingAppointmentCard } from '../../../features/dashboard/components/UpcomingAppointmentCard'
 import {
   DOCTOR_ANALYTICS_QUERY_KEY,
@@ -37,6 +34,10 @@ import {
   startAppointmentErrorMessage,
   useStartAppointment,
 } from '../../../features/dashboard/hooks/useStartAppointment'
+import {
+  DOCTOR_PATIENTS_QUERY_KEY,
+  listDoctorPatients,
+} from '../../../features/patients/api/patientsApi'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
 
 function ScheduleRow({
@@ -65,16 +66,23 @@ function PanelCard({
   subtitle,
   children,
   action,
+  className,
 }: {
   icon: React.ReactNode
   title: string
   subtitle: string
   children: React.ReactNode
   action?: React.ReactNode
+  className?: string
 }) {
   return (
-    <section className="flex h-full flex-col rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm">
-      <div className="flex items-start gap-3">
+    <section
+      className={clsx(
+        'flex h-full min-h-[380px] flex-col rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)]',
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#f3edff] text-[#8a37ff]">
           {icon}
         </div>
@@ -83,24 +91,29 @@ function PanelCard({
           <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>
-      <div className="mt-4 flex-1">{children}</div>
-      {action && <div className="mt-4 shrink-0">{action}</div>}
+      <div className="mt-4 min-h-0 flex-1 overflow-hidden">{children}</div>
+      {action ? <div className="mt-4 shrink-0">{action}</div> : null}
     </section>
   )
 }
 
 function DashboardSkeleton() {
   return (
-    <div className="animate-pulse space-y-5">
-      <div className="h-40 rounded-2xl bg-slate-200/80" />
+    <div className="w-full animate-pulse space-y-6 pb-8">
+      <div className="h-24 rounded-xl bg-slate-200/80" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-28 rounded-xl bg-slate-200/70" />
+          <div key={i} className="h-28 rounded-2xl bg-slate-200/70" />
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_360px]">
-        <div className="h-64 rounded-xl bg-slate-200/70" />
-        <div className="h-64 rounded-xl bg-slate-200/70" />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="h-44 rounded-2xl bg-slate-200/70" />
+        <div className="h-44 rounded-2xl bg-slate-200/70" />
+      </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-[380px] rounded-2xl bg-slate-200/70" />
+        ))}
       </div>
     </div>
   )
@@ -108,7 +121,6 @@ function DashboardSkeleton() {
 
 export function DashboardHomePage() {
   const { doctorTimezone: profileTimezone } = useDoctorTimezone()
-  const [showAnalytics, setShowAnalytics] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -122,12 +134,13 @@ export function DashboardHomePage() {
     queryFn: () => getDoctorAnalytics(),
   })
 
-  const startMutation = useStartAppointment()
+  const patientsQuery = useQuery({
+    queryKey: [DOCTOR_PATIENTS_QUERY_KEY, 'dashboard-preview'],
+    queryFn: () => listDoctorPatients({ limit: 8, offset: 0 }),
+    staleTime: 60_000,
+  })
 
-  const sparklineValues = useMemo(
-    () => analyticsQuery.data?.per_day.map((d) => d.count) ?? [],
-    [analyticsQuery.data?.per_day],
-  )
+  const startMutation = useStartAppointment()
 
   const upcomingAppointments = useMemo(() => {
     const dashboard = dashboardQuery.data
@@ -155,9 +168,17 @@ export function DashboardHomePage() {
   }
 
   const handleRefresh = () => {
-    void dashboardQuery.refetch()
-    void analyticsQuery.refetch()
+    void Promise.all([
+      dashboardQuery.refetch(),
+      analyticsQuery.refetch(),
+      patientsQuery.refetch(),
+    ])
   }
+
+  const isRefreshing =
+    dashboardQuery.isFetching ||
+    analyticsQuery.isFetching ||
+    patientsQuery.isFetching
 
   if (dashboardQuery.isLoading) {
     return <DashboardSkeleton />
@@ -174,7 +195,7 @@ export function DashboardHomePage() {
         </p>
         <button
           type="button"
-          onClick={() => void dashboardQuery.refetch()}
+          onClick={() => void handleRefresh()}
           className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#8a37ff] px-5 text-sm font-semibold text-white transition hover:bg-[#772cf0]"
         >
           <FiRefreshCw className="h-4 w-4" />
@@ -185,21 +206,22 @@ export function DashboardHomePage() {
   }
 
   const { doctor, today, queues, recent_appointments } = dashboardQuery.data
-  const analytics = analyticsQuery.data
-  const revenueLabel = analytics
-    ? formatFee(analytics.revenue.amount, analytics.revenue.currency)
-    : null
+  const patientTotal = patientsQuery.data?.total ?? 0
+  const patientPreview = patientsQuery.data?.data ?? []
 
   return (
-    <div className="space-y-5 pb-6">
-      <DashboardHero
-        doctorName={doctor.full_name}
-        specialty={doctor.specialty}
-        verificationStatus={doctor.verification_status}
-        isRefreshing={dashboardQuery.isFetching}
-        onRefresh={handleRefresh}
-      />
+    <div className="w-full pb-8">
+      <div className="sticky top-0 z-20 -mx-4 mb-6 bg-gradient-to-b from-[#f8f9ff] from-90% to-[#f4f6fb] px-4 pb-3 pt-0 shadow-[0_6px_16px_-8px_rgba(15,23,42,0.12)] md:-mx-9 md:px-9">
+        <DashboardHero
+          doctorName={doctor.full_name}
+          specialty={doctor.specialty}
+          verificationStatus={doctor.verification_status}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefresh}
+        />
+      </div>
 
+      <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <DashboardMetricCard
           title="Today"
@@ -223,203 +245,149 @@ export function DashboardHomePage() {
           accent="emerald"
         />
         <DashboardMetricCard
-          title="Practice status"
-          value={doctor.is_active ? 'Active' : 'Paused'}
-          subtitle={doctor.specialty ?? 'Your clinic'}
+          title="Patients"
+          value={patientsQuery.isLoading ? '…' : patientTotal}
+          subtitle="In your practice"
           icon={FiUsers}
           accent="slate"
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          {analyticsQuery.isSuccess && analytics ? (
-            <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm sm:p-6">
-              <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Revenue · last 30 days
-                  </p>
-                  <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                    {revenueLabel ?? '—'}
-                  </p>
-                  <p className="mt-1.5 text-sm text-slate-500">
-                    From completed visits in this period
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowAnalytics(true)}
-                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 text-xs font-semibold text-slate-700 transition hover:border-[#8a37ff]/40 hover:bg-[#faf8ff] hover:text-[#8a37ff]"
-                  >
-                    <FiBarChart2 className="h-4 w-4" />
-                    View full analytics
-                  </button>
-                </div>
-                <DashboardSparkline values={sparklineValues} />
-              </div>
-            </section>
-          ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-              {analyticsQuery.isLoading
-                ? 'Loading analytics…'
-                : 'Analytics unavailable'}
-            </div>
-          )}
+      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+        <DashboardAnalyticsStrip
+          analytics={analyticsQuery.data}
+          isLoading={analyticsQuery.isLoading}
+          className="h-full min-h-[220px]"
+        />
+        <DashboardPatientsStrip
+          patients={patientPreview}
+          total={patientTotal}
+          isLoading={patientsQuery.isLoading}
+          className="min-h-[220px]"
+        />
+      </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <PanelCard
-              icon={<FiCalendar className="h-5 w-5" />}
-              title="Today's schedule"
-              subtitle={
-                today.next_appointment
-                  ? 'Next visit is in your upcoming panel'
-                  : `${today.appointment_count} visit${today.appointment_count === 1 ? '' : 's'} today`
-              }
-              action={
-                <Link
-                  to="/dashboard/calendar"
-                  className="flex h-10 w-full items-center justify-center rounded-lg bg-[#8a37ff] text-sm font-semibold text-white transition hover:bg-[#772cf0]"
-                >
-                  Open calendar
-                </Link>
-              }
+      <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
+        <PanelCard
+          icon={<FiCalendar className="h-5 w-5" />}
+          title="Today's schedule"
+          subtitle={
+            today.next_appointment
+              ? 'Next visit is in upcoming appointments'
+              : `${today.appointment_count} visit${today.appointment_count === 1 ? '' : 's'} today`
+          }
+          action={
+            <Link
+              to="/dashboard/calendar"
+              className="flex h-10 w-full items-center justify-center rounded-lg bg-[#8a37ff] text-sm font-semibold text-white transition hover:bg-[#772cf0]"
             >
-              <div className="space-y-2">
-                <ScheduleRow
-                  label="Today"
-                  value={`${today.appointment_count} visits`}
-                  dotClass="bg-[#8a37ff]"
-                />
-                <ScheduleRow
-                  label="Pending"
-                  value={`${queues.pending_approval} to review`}
-                  dotClass="bg-amber-500"
-                />
-                <ScheduleRow
-                  label="This week"
-                  value={`${queues.upcoming_7d} upcoming`}
-                  dotClass="bg-emerald-600"
-                />
-              </div>
-            </PanelCard>
-
-            <PanelCard
-              icon={<FiActivity className="h-5 w-5" />}
-              title="Recent activity"
-              subtitle="Latest visits on your practice"
-              action={
-                <Link
-                  to="/dashboard/appointments"
-                  className="flex h-10 w-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 transition hover:border-[#8a37ff]/40 hover:text-[#8a37ff]"
-                >
-                  All appointments
-                </Link>
-              }
-            >
-              <div className="max-h-[200px] space-y-1 overflow-y-auto pr-1">
-                {recent_appointments.length > 0 ? (
-                  recent_appointments.slice(0, 6).map((item, index) => {
-                    const tz = appointmentDoctorTimezone(item, profileTimezone)
-                    return (
-                      <div
-                        key={item.id}
-                        className="relative flex gap-3 rounded-lg px-2 py-2.5 transition hover:bg-slate-50"
-                      >
-                        {index < recent_appointments.length - 1 && (
-                          <span
-                            className="absolute left-[18px] top-9 bottom-0 w-px bg-slate-200"
-                            aria-hidden
-                          />
-                        )}
-                        <span className="relative z-[1] mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f3edff] text-[#8a37ff] ring-4 ring-white">
-                          <FiCheckCircle className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 pt-0.5">
-                          <p className="truncate text-sm font-semibold text-slate-900">
-                            {item.patient_name?.trim() || item.issue || 'Visit'}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {formatAppointmentDateTime(item.starts_at, tz)}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <p className="py-6 text-center text-sm text-slate-500">
-                    No recent appointments yet.
-                  </p>
-                )}
-              </div>
-            </PanelCard>
-
-            {analytics && (
-              <PanelCard
-                icon={<FiArrowUp className="h-5 w-5" />}
-                title="Performance snapshot"
-                subtitle={`${analytics.range.from} – ${analytics.range.to}`}
-                action={
-                  <button
-                    type="button"
-                    onClick={() => setShowAnalytics(true)}
-                    className="flex h-10 w-full items-center justify-center rounded-lg border border-[#e9d5ff] bg-[#faf8ff] text-sm font-semibold text-[#7c3aed] transition hover:bg-[#f3edff]"
-                  >
-                    View breakdown
-                  </button>
-                }
-              >
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: 'Done', value: analytics.totals.completed },
-                    { label: 'Confirmed', value: analytics.totals.confirmed },
-                    { label: 'Total', value: analytics.totals.appointments_total },
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-center"
-                    >
-                      <p className="text-2xl font-bold text-slate-900">
-                        {stat.value}
-                      </p>
-                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                        {stat.label}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </PanelCard>
-            )}
-          </div>
-        </div>
-
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/90 px-5 py-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">
-                  Upcoming appointments
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Confirmed visits · start calls from here
-                </p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f3edff] text-[#8a37ff]">
-                <FiClock className="h-5 w-5" />
-              </div>
-            </div>
-            {today.next_appointment && (
-              <p className="mt-3 rounded-lg border border-[#e9d5ff] bg-[#faf8ff] px-3 py-2 text-xs text-slate-600">
-                <span className="font-medium text-slate-500">Next patient · </span>
-                <span className="font-semibold text-slate-900">
-                  {today.next_appointment.patient_name?.trim() ||
-                    today.next_appointment.issue ||
-                    'Consultation'}
-                </span>
+              Open calendar
+            </Link>
+          }
+        >
+          <div className="space-y-2">
+            <ScheduleRow
+              label="Today"
+              value={`${today.appointment_count} visits`}
+              dotClass="bg-[#8a37ff]"
+            />
+            <ScheduleRow
+              label="Pending"
+              value={`${queues.pending_approval} to review`}
+              dotClass="bg-amber-500"
+            />
+            <ScheduleRow
+              label="This week"
+              value={`${queues.upcoming_7d} upcoming`}
+              dotClass="bg-emerald-600"
+            />
+            {doctor.is_active ? (
+              <p className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-xs font-medium text-emerald-800">
+                Practice is active and accepting bookings
+              </p>
+            ) : (
+              <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs font-medium text-amber-800">
+                Practice is paused
               </p>
             )}
           </div>
+        </PanelCard>
 
-          <div className="flex-1 space-y-2 overflow-y-auto p-4">
+        <PanelCard
+          icon={<FiActivity className="h-5 w-5" />}
+          title="Recent activity"
+          subtitle="Latest visits on your practice"
+          action={
+            <Link
+              to="/dashboard/appointments"
+              className="flex h-10 w-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 transition hover:border-[#8a37ff]/40 hover:text-[#8a37ff]"
+            >
+              All appointments
+            </Link>
+          }
+        >
+          <div className="h-full max-h-[280px] space-y-1 overflow-y-auto pr-1">
+            {recent_appointments.length > 0 ? (
+              recent_appointments.slice(0, 8).map((item, index) => {
+                const tz = appointmentDoctorTimezone(item, profileTimezone)
+                return (
+                  <div
+                    key={item.id}
+                    className="relative flex gap-3 rounded-lg px-2 py-2.5 transition hover:bg-slate-50"
+                  >
+                    {index < Math.min(recent_appointments.length, 8) - 1 && (
+                      <span
+                        className="absolute left-[18px] top-9 bottom-0 w-px bg-slate-200"
+                        aria-hidden
+                      />
+                    )}
+                    <span className="relative z-[1] mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f3edff] text-[#8a37ff] ring-4 ring-white">
+                      <FiCheckCircle className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 pt-0.5">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {item.patient_name?.trim() || item.issue || 'Visit'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {formatAppointmentDateTime(item.starts_at, tz)}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <p className="py-6 text-center text-sm text-slate-500">
+                No recent appointments yet.
+              </p>
+            )}
+          </div>
+        </PanelCard>
+
+        <PanelCard
+          icon={<FiClock className="h-5 w-5" />}
+          title="Upcoming appointments"
+          subtitle="Start visits from here"
+          action={
+            <Link
+              to="/dashboard/appointments"
+              className="flex h-10 w-full items-center justify-center rounded-lg text-sm font-semibold text-[#8a37ff] transition hover:bg-[#faf8ff]"
+            >
+              View all appointments →
+            </Link>
+          }
+        >
+          {today.next_appointment ? (
+            <p className="mb-3 shrink-0 rounded-lg border border-[#e9d5ff] bg-[#faf8ff] px-3 py-2 text-xs text-slate-600">
+              <span className="font-medium text-slate-500">Next patient · </span>
+              <span className="font-semibold text-slate-900">
+                {today.next_appointment.patient_name?.trim() ||
+                  today.next_appointment.issue ||
+                  'Consultation'}
+              </span>
+            </p>
+          ) : null}
+
+          <div className="h-full max-h-[280px] space-y-2.5 overflow-y-auto pr-1">
             {upcomingAppointments.length > 0 ? (
               upcomingAppointments.slice(0, 8).map((appointment) => (
                 <UpcomingAppointmentCard
@@ -456,24 +424,9 @@ export function DashboardHomePage() {
               </div>
             )}
           </div>
-
-          <div className="border-t border-slate-100 p-4">
-            <Link
-              to="/dashboard/appointments"
-              className="flex h-10 w-full items-center justify-center rounded-lg text-sm font-semibold text-[#8a37ff] transition hover:bg-[#faf8ff]"
-            >
-              View all appointments →
-            </Link>
-          </div>
-        </aside>
+        </PanelCard>
       </div>
-
-      {showAnalytics && analytics && (
-        <AnalyticsModal
-          analytics={analytics}
-          onClose={() => setShowAnalytics(false)}
-        />
-      )}
+      </div>
     </div>
   )
 }

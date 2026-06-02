@@ -36,8 +36,8 @@ export function DashboardLayout() {
   const displayName = user?.name || user?.email || 'Doctor'
 
   return (
-    <div className="h-screen overflow-hidden bg-[#f4f4f8] text-[#161b26]">
-      <div className="flex h-full min-h-0 overflow-hidden bg-[#f7f7fb]">
+    <div className="h-screen overflow-hidden bg-[#f4f6fb] font-sans text-[#0f172a] antialiased">
+      <div className="flex h-full min-h-0 overflow-hidden bg-gradient-to-b from-[#f8f9ff] to-[#f4f6fb]">
         <div className="hidden h-full md:flex">
           <Sidebar />
         </div>

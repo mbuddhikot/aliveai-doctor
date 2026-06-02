@@ -16,18 +16,20 @@ export function DashboardTopbar({
   const navigate = useNavigate()
 
   return (
-    <header className="flex min-h-[76px] shrink-0 items-center justify-between border-b border-[#dfe3ea] bg-white px-4 md:h-20 md:px-9">
+    <header className="sticky top-0 z-30 flex min-h-[74px] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur md:h-[78px] md:px-8 xl:px-10">
       <div className="flex items-center gap-4 md:gap-7">
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe3ea] bg-white text-black shadow-sm transition hover:bg-[#f8fafc] md:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-[#8a37ff]/30 hover:text-[#8a37ff] md:hidden"
           aria-label="Open sidebar"
           onClick={onOpenSidebar}
         >
           <FiMenu className="h-5 w-5" />
         </button>
 
-        <h1 className="text-xl font-semibold text-black md:text-3xl">{title}</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900 md:text-[1.65rem]">
+          {title}
+        </h1>
       </div>
 
       <button
@@ -37,7 +39,7 @@ export function DashboardTopbar({
         onClick={() => navigate('/dashboard/profile')}
       >
         <UserAvatar name={name} avatarUrl={avatarUrl} />
-        <span className="max-w-[180px] truncate text-xl font-semibold text-[#111827] underline-offset-4 transition-colors duration-150 group-hover:text-[#8a37ff] group-hover:underline">
+        <span className="max-w-[180px] truncate text-base font-semibold text-[#111827] underline-offset-4 transition-colors duration-150 group-hover:text-[#8a37ff] group-hover:underline">
           {name}
         </span>
       </button>

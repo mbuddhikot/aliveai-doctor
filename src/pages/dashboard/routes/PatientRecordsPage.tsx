@@ -139,10 +139,10 @@ function PatientListItem({
       type="button"
       onClick={onSelect}
       className={clsx(
-        'w-full rounded-[10px] border p-3 text-left transition',
+        'w-full rounded-[10px] border p-3 text-left transition-all duration-200',
         isSelected
-          ? 'border-[#8a37ff] bg-[#faf7ff] shadow-[0_4px_16px_rgba(138,55,255,0.12)]'
-          : 'border-[#edf0f4] bg-white hover:border-[#cfd6e1] hover:bg-[#fbfcfe]',
+          ? 'border-[#8a37ff] bg-[#faf7ff] shadow-[0_8px_20px_rgba(138,55,255,0.16)] ring-2 ring-[#e9d5ff]'
+          : 'border-[#edf0f4] bg-white hover:-translate-y-[1px] hover:border-[#b9c4d4] hover:bg-[#fbfcff] hover:shadow-[0_8px_20px_rgba(15,23,42,0.08)]',
       )}
     >
       <div className="flex items-start gap-3">
@@ -186,7 +186,7 @@ function VisitRow({
   const hasPrescription = visitPrescriptions.length > 0
 
   return (
-    <div className="rounded-[10px] border border-[#edf0f4] bg-white p-3">
+    <div className="rounded-[10px] border border-[#edf0f4] bg-white p-3 transition-all duration-200 hover:-translate-y-[1px] hover:border-[#cfd6e1] hover:shadow-[0_8px_20px_rgba(15,23,42,0.07)]">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-bold text-black">
@@ -206,16 +206,18 @@ function VisitRow({
             · {appointment.duration_minutes} min
           </p>
         </div>
+        <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
+          <WorkflowBadge
+            workflowStatus={appointment.workflow_status}
+            doctorStatus={appointment.doctor_status}
+          />
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <StatusBadge status={appointment.status} />
         {fee && (
           <span className="shrink-0 text-xs font-semibold text-[#64748b]">{fee}</span>
         )}
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <WorkflowBadge
-          workflowStatus={appointment.workflow_status}
-          doctorStatus={appointment.doctor_status}
-        />
-        <StatusBadge status={appointment.status} />
       </div>
       <div className="mt-3 border-t border-[#f1f5f9] pt-3">
         {hasPrescription ? (

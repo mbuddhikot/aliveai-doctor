@@ -47,6 +47,24 @@ export function doctorTimeFromUtc(iso: string, doctorTimezone: string): string {
   return local?.toFormat('HH:mm') ?? ''
 }
 
+/** Doctor-local wall clock (yyyy-MM-dd + HH:mm) → UTC ISO-8601 for API payloads. */
+export function doctorLocalWallClockToUtcIso(
+  dateKey: string,
+  time: string,
+  doctorTimezone: string,
+): string | null {
+  const trimmedDate = dateKey.trim()
+  const trimmedTime = time.trim()
+  if (!trimmedDate || !trimmedTime) return null
+
+  const local = DateTime.fromISO(`${trimmedDate}T${trimmedTime}`, {
+    zone: doctorTimezone,
+  })
+  if (!local.isValid) return null
+
+  return local.toUTC().toISO({ suppressMilliseconds: true })
+}
+
 export function doctorDateTimeFromKey(
   dateKey: string,
   doctorTimezone: string,
@@ -137,6 +155,14 @@ export function monthOfDateKey(
   doctorTimezone: string,
 ): number {
   return doctorDateTimeFromKey(dateKey, doctorTimezone).month
+}
+
+export function calendarMonthFromDateKey(
+  dateKey: string,
+  doctorTimezone: string,
+): { year: number; month: number } {
+  const dt = doctorDateTimeFromKey(dateKey, doctorTimezone)
+  return { year: dt.year, month: dt.month }
 }
 
 export function weekDayKeysAround(

@@ -1,4 +1,5 @@
 import { apiClient, extractApiErrorMessage, getAxiosError } from '../../../lib/apiClient'
+import { doctorLocalWallClockToUtcIso } from '../../../lib/doctorTimezone'
 import {
   normalizeAppointmentList,
   normalizeDoctorAppointment,
@@ -56,13 +57,18 @@ function shouldUseAppointmentsFallback(err: unknown): boolean {
 function buildListResponse(
   data: unknown,
   appointments: DoctorAppointment[],
+  fallbackLimit: number,
+  fallbackOffset: number,
 ): AppointmentListResponse {
+  const root = isRecord(data) ? data : {}
   const total =
-    isRecord(data) && typeof data.total === 'number'
-      ? data.total
-      : appointments.length
+    typeof root.total === 'number' ? root.total : appointments.length
+  const limit =
+    typeof root.limit === 'number' ? root.limit : fallbackLimit
+  const offset =
+    typeof root.offset === 'number' ? root.offset : fallbackOffset
 
-  return { data: appointments, total }
+  return { data: appointments, total, limit, offset }
 }
 
 /**
@@ -72,16 +78,53 @@ function buildListResponse(
 async function fetchDoctorAppointmentsEndpoint(params: {
   doctorId: string
   status?: DoctorAppointmentsApiStatus
+  q?: string
+  limit?: number
+  offset?: number
 }): Promise<AppointmentListResponse> {
+  const limit = params.limit ?? 20
+  const offset = params.offset ?? 0
+
   const { data } = await apiClient.get<unknown>('/v1/doctor/appointments', {
     params: {
       doctor_id: params.doctorId,
+      limit,
+      offset,
       ...(params.status ? { status: params.status } : {}),
+      ...(params.q?.trim() ? { q: params.q.trim() } : {}),
     },
   })
 
   const appointments = normalizeAppointmentList(data)
-  return buildListResponse(data, appointments)
+  return buildListResponse(data, appointments, limit, offset)
+}
+
+async function fetchAllDoctorAppointmentsPages(
+  doctorId: string,
+): Promise<AppointmentListResponse> {
+  const pageSize = 200
+  let offset = 0
+  let total = 0
+  const merged: DoctorAppointment[] = []
+
+  while (true) {
+    const page = await fetchDoctorAppointmentsEndpoint({
+      doctorId,
+      limit: pageSize,
+      offset,
+    })
+    merged.push(...page.data)
+    total = page.total
+    offset += page.data.length
+    if (page.data.length === 0 || offset >= total) break
+  }
+
+  return {
+    data: dedupeAppointments(merged),
+    total,
+    limit: merged.length,
+    offset: 0,
+  }
 }
 
 /**
@@ -102,7 +145,12 @@ async function fetchAppointmentsByStatusFallback(
   )
   const filtered = filterForDoctor(merged, doctorId)
 
-  return { data: filtered, total: filtered.length }
+  return {
+    data: filtered,
+    total: filtered.length,
+    limit: filtered.length,
+    offset: 0,
+  }
 }
 
 /** Last resort when list endpoints fail — uses dashboard `recent_appointments`. */
@@ -116,25 +164,54 @@ async function fetchDashboardAppointmentsFallback(
       )
     : []
   const filtered = filterForDoctor(recent, doctorId)
-  return { data: filtered, total: filtered.length }
+  return {
+    data: filtered,
+    total: filtered.length,
+    limit: filtered.length,
+    offset: 0,
+  }
+}
+
+export const DOCTOR_APPOINTMENTS_PAGE_SIZE = 10
+
+/**
+ * Paginated list for My Appointments — `GET /v1/doctor/appointments` only.
+ * @see https://aliveai-backend-api-927940582634.us-central1.run.app/docs#/appointments/list_doctor_appointments_v1_doctor_appointments_get
+ */
+export async function listDoctorAppointmentsPaginated(params: {
+  doctorId: string
+  status?: DoctorAppointmentsApiStatus
+  q?: string
+  limit?: number
+  offset?: number
+}): Promise<AppointmentListResponse> {
+  try {
+    return await fetchDoctorAppointmentsEndpoint({
+      doctorId: params.doctorId,
+      status: params.status,
+      q: params.q,
+      limit: params.limit ?? DOCTOR_APPOINTMENTS_PAGE_SIZE,
+      offset: params.offset ?? 0,
+    })
+  } catch (err) {
+    throw new Error(
+      extractApiErrorMessage(err, 'Unable to load appointments'),
+      { cause: err },
+    )
+  }
 }
 
 /**
- * List appointments for the logged-in doctor.
- * Tries the doctor list API first, then patient list statuses, then dashboard data.
+ * Full list for calendar / patient records (fetches all pages from doctor API).
  */
 export async function listDoctorAppointments(params: {
   doctorId: string
-  /** Optional: pending | confirm | cancelled | done | postponed */
   status?: DoctorAppointmentsApiStatus
 }): Promise<AppointmentListResponse> {
   let primaryError: unknown
 
   try {
-    const primary = await fetchDoctorAppointmentsEndpoint(params)
-    if (primary.data.length > 0 || !params.status) {
-      return primary
-    }
+    return await fetchAllDoctorAppointmentsPages(params.doctorId)
   } catch (err) {
     primaryError = err
     if (!shouldUseAppointmentsFallback(err)) {
@@ -172,7 +249,7 @@ export async function listDoctorAppointments(params: {
     )
   }
 
-  return { data: [], total: 0 }
+  return { data: [], total: 0, limit: 0, offset: 0 }
 }
 
 export async function approveDoctorAppointment(params: {
@@ -218,12 +295,25 @@ export async function rejectDoctorAppointment(params: {
 export async function rescheduleDoctorAppointment(params: {
   appointmentId: string
   doctorId: string
+  doctorTimezone: string
   payload: RescheduleAppointmentPayload
 }): Promise<DoctorAppointment> {
+  const startsAt = doctorLocalWallClockToUtcIso(
+    params.payload.date,
+    params.payload.time,
+    params.doctorTimezone,
+  )
+  if (!startsAt) {
+    throw new Error('Invalid date or time for reschedule.')
+  }
+
   try {
     const { data } = await apiClient.put<unknown>(
       `/v1/doctor/appointments/${params.appointmentId}/reschedule`,
-      params.payload,
+      {
+        starts_at: startsAt,
+        duration_minutes: params.payload.duration_minutes ?? null,
+      },
       { params: { doctor_id: params.doctorId } },
     )
     return normalizeDoctorAppointment(isRecord(data) ? data : {})

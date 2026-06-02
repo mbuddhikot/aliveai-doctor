@@ -118,9 +118,5 @@ export function filterPatients(
 ): PatientSummary[] {
   const q = query.trim().toLowerCase()
   if (!q) return patients
-  return patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(q) ||
-      (p.email?.toLowerCase().includes(q) ?? false),
-  )
+  return patients.filter((p) => p.name.toLowerCase().includes(q))
 }

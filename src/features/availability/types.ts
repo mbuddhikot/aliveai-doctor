@@ -30,7 +30,7 @@ export type AvailabilityException = {
   unavailable: boolean
 }
 
-/** UI model — booking rules kept locally; weekly slots sync with the API. */
+/** UI model — weekly slots via availability API; slot/buffer via booking-rules API. */
 export type DoctorAvailability = {
   timezone: string
   slotDurationMinutes: number
@@ -51,10 +51,19 @@ export type ApiAvailabilitySlot = {
 
 export type DoctorAvailabilityResponse = {
   doctor_id: string
+  slot_duration_minutes?: number
+  buffer_between_visits_minutes?: number
   slots: ApiAvailabilitySlot[]
 }
 
+/**
+ * POST /v1/doctor/availability — replaces the doctor's weekly schedule.
+ * @see https://aliveai-backend-api-927940582634.us-central1.run.app/docs#/appointments/set_doctor_availability_v1_doctor_availability_post
+ */
 export type DoctorAvailabilitySetRequest = {
+  /** Optional on API; slot/buffer are also saved via PUT /v1/doctor/booking-rules. */
+  slot_duration_minutes?: number
+  buffer_between_visits_minutes?: number
   slots: Array<{
     weekday: number
     start_time: string
@@ -62,3 +71,11 @@ export type DoctorAvailabilitySetRequest = {
     is_available?: boolean
   }>
 }
+
+/** GET/PUT /v1/doctor/booking-rules */
+export type DoctorBookingRules = {
+  slot_duration_minutes: number
+  buffer_between_visits_minutes: number
+}
+
+export type DoctorBookingRulesUpdateRequest = DoctorBookingRules

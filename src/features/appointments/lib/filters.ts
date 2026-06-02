@@ -1,5 +1,44 @@
 import type { AppointmentFilterTab } from '../constants'
-import type { DoctorAppointment } from '../types'
+import type { DoctorAppointment, DoctorAppointmentStatus } from '../types'
+import { isAppointmentUpcoming } from './format'
+
+/** Maps UI tabs to `GET /v1/doctor/appointments` status query param. */
+export function tabToApiStatus(
+  tab: AppointmentFilterTab,
+): DoctorAppointmentStatus | undefined {
+  switch (tab) {
+    case 'pending':
+      return 'pending'
+    case 'confirmed':
+      return 'confirm'
+    case 'cancelled':
+      return 'cancelled'
+    case 'past':
+      return 'done'
+    default:
+      return undefined
+  }
+}
+
+/** Tabs filtered on the server via `status` / `q` — no extra client tab filter. */
+export function tabUsesServerFilter(tab: AppointmentFilterTab): boolean {
+  return tab !== 'upcoming' && tab !== 'all'
+}
+
+/** Upcoming tab: API has no status value; filter the current page client-side. */
+export function applyClientTabFilter(
+  appointments: DoctorAppointment[],
+  tab: AppointmentFilterTab,
+): DoctorAppointment[] {
+  if (tab !== 'upcoming') return appointments
+
+  return appointments.filter(
+    (item) =>
+      item.status === 'upcoming' ||
+      item.doctor_status === 'postponed' ||
+      (item.doctor_status === 'confirm' && isAppointmentUpcoming(item)),
+  )
+}
 
 export function filterAppointments(
   appointments: DoctorAppointment[],

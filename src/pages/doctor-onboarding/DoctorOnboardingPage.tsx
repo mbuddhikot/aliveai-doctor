@@ -28,6 +28,8 @@ export function DoctorOnboardingPage() {
     statusQuery,
     saveProfileMutation,
     uploadDocumentMutation,
+    updateDocumentMutation,
+    deleteDocumentMutation,
     uploadDocumentsBatch,
   } = useDoctorOnboarding()
 
@@ -134,8 +136,20 @@ export function DoctorOnboardingPage() {
                 <DocumentsStep
                   documents={documents}
                   isUploading={uploadDocumentMutation.isPending}
-                  uploadError={uploadDocumentMutation.error}
+                  isUpdating={updateDocumentMutation.isPending}
+                  uploadError={
+                    uploadDocumentMutation.error ??
+                    updateDocumentMutation.error ??
+                    deleteDocumentMutation.error
+                  }
                   onUploadBatch={uploadDocumentsBatch}
+                  onUpdateDocument={(params) =>
+                    updateDocumentMutation.mutateAsync(params)
+                  }
+                  isDeleting={deleteDocumentMutation.isPending}
+                  onDeleteDocument={(documentId) =>
+                    deleteDocumentMutation.mutateAsync(documentId)
+                  }
                   onContinue={() => goToStep('review')}
                 />
               )}

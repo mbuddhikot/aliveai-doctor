@@ -33,11 +33,10 @@ import type {
   WeekdayId,
 } from '../../../features/availability/types'
 
-const AVAILABILITY_VISIT_MODES = ['video', 'clinic'] as const satisfies readonly ConsultationMode[]
+const AVAILABILITY_VISIT_MODES = ['video'] as const satisfies readonly ConsultationMode[]
 
 const MODE_LABELS: Record<(typeof AVAILABILITY_VISIT_MODES)[number], string> = {
   video: 'Video',
-  clinic: 'Clinic',
 }
 
 function normalizeSlotModes(modes: ConsultationMode[]): ConsultationMode[] {
@@ -47,7 +46,7 @@ function normalizeSlotModes(modes: ConsultationMode[]): ConsultationMode[] {
 }
 
 const SLOT_DURATIONS = [15, 20, 30, 45, 60]
-const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30]
+const BUFFER_OPTIONS = [0, 5, 10, 15, 20]
 
 function createId(): string {
   return crypto.randomUUID()
@@ -528,7 +527,7 @@ export function AvailabilityPage() {
 
   const saveMutation = useMutation({
     mutationFn: (payload: DoctorAvailability) =>
-      saveDoctorAvailability(doctorId!, payload),
+      saveDoctorAvailability(doctorId ?? undefined, payload),
   })
 
   const availabilitySource =
@@ -603,7 +602,9 @@ export function AvailabilityPage() {
       void queryClient.invalidateQueries({
         queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId],
       })
-      setSaveMessage('Availability saved successfully. Patients can book these times.')
+      setSaveMessage(
+        'Availability and booking rules saved successfully. Patients can book these times.',
+      )
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Unable to save availability.'
@@ -617,7 +618,7 @@ export function AvailabilityPage() {
 
   if (doctorIdLoading) {
     return (
-      <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-[#64748b]">
+      <div className="flex min-h-0 flex-1 items-center justify-center text-sm font-medium text-[#64748b]">
         Loading your profile…
       </div>
     )
@@ -639,8 +640,8 @@ export function AvailabilityPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <section className="rounded-lg border border-[#dfe3ea] bg-white px-4 py-3 shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto xl:overflow-hidden">
+      <section className="shrink-0 rounded-lg border border-[#dfe3ea] bg-white px-4 py-3 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -653,7 +654,8 @@ export function AvailabilityPage() {
               </h1>
             </div>
             <p className="mt-1 text-xs leading-snug text-[#64748b] sm:max-w-xl">
-              Weekly slots, visit modes, buffers, and days off for patient booking.
+              Set weekly hours and booking rules, then click Save to sync with the
+              server. Patients can book your saved slots.
             </p>
           </div>
 
@@ -715,7 +717,7 @@ export function AvailabilityPage() {
         )}
       </section>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
         <StatCard
           label="Active days"
           value={`${activeDays}/7`}
@@ -736,126 +738,130 @@ export function AvailabilityPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-3">
-          <Panel
-            title="Weekly schedule"
-            subtitle={
-              availabilityQuery.isLoading
-                ? 'Loading saved availability...'
-                : 'Use multiple slots per day for morning, afternoon, or evening blocks.'
-            }
-          >
-            <div className="space-y-3">
-              {availability.weekly.map((day) => (
-                <DayEditor
-                  key={day.id}
-                  day={day}
-                  invalidSlotIds={invalidByDay[day.id]}
-                  onChange={(nextDay) => updateDay(day.id, nextDay)}
-                />
-              ))}
-            </div>
-          </Panel>
-
-          <Panel
-            title="Days off and exceptions"
-            subtitle="Block holidays, conferences, or personal leave without changing your recurring week."
-            action={
-              <button
-                type="button"
-                onClick={addException}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-bold text-[#8a37ff] transition hover:bg-[#f3edff]"
-              >
-                <FiPlus className="h-4 w-4" />
-                Add day off
-              </button>
-            }
-          >
-            <div className="space-y-3">
-              {availability.exceptions.length > 0 ? (
-                availability.exceptions.map((exception) => (
-                  <ExceptionRow
-                    key={exception.id}
-                    item={exception}
-                    onChange={(nextException) =>
-                      updateAvailability({
-                        ...availability,
-                        exceptions: availability.exceptions.map((item) =>
-                          item.id === exception.id ? nextException : item,
-                        ),
-                      })
-                    }
-                    onRemove={() =>
-                      updateAvailability({
-                        ...availability,
-                        exceptions: availability.exceptions.filter(
-                          (item) => item.id !== exception.id,
-                        ),
-                      })
-                    }
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_340px] xl:grid-rows-1 xl:overflow-hidden">
+        <div className="flex min-h-0 flex-col overflow-hidden xl:h-full">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-0.5">
+            <Panel
+              title="Weekly schedule"
+              subtitle={
+                availabilityQuery.isLoading
+                  ? 'Loading saved availability...'
+                  : 'Use multiple slots per day for morning, afternoon, or evening blocks.'
+              }
+            >
+              <div className="space-y-3">
+                {availability.weekly.map((day) => (
+                  <DayEditor
+                    key={day.id}
+                    day={day}
+                    invalidSlotIds={invalidByDay[day.id]}
+                    onChange={(nextDay) => updateDay(day.id, nextDay)}
                   />
-                ))
-              ) : (
-                <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] p-4 text-sm text-[#64748b]">
-                  No exceptions yet. Add a day off when you need to pause
-                  bookings for a specific date.
-                </div>
-              )}
-            </div>
-          </Panel>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel
+              title="Days off and exceptions"
+              subtitle="Block holidays, conferences, or personal leave without changing your recurring week."
+              action={
+                <button
+                  type="button"
+                  onClick={addException}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-bold text-[#8a37ff] transition hover:bg-[#f3edff]"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  Add day off
+                </button>
+              }
+            >
+              <div className="space-y-3">
+                {availability.exceptions.length > 0 ? (
+                  availability.exceptions.map((exception) => (
+                    <ExceptionRow
+                      key={exception.id}
+                      item={exception}
+                      onChange={(nextException) =>
+                        updateAvailability({
+                          ...availability,
+                          exceptions: availability.exceptions.map((item) =>
+                            item.id === exception.id ? nextException : item,
+                          ),
+                        })
+                      }
+                      onRemove={() =>
+                        updateAvailability({
+                          ...availability,
+                          exceptions: availability.exceptions.filter(
+                            (item) => item.id !== exception.id,
+                          ),
+                        })
+                      }
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] p-4 text-sm text-[#64748b]">
+                    No exceptions yet. Add a day off when you need to pause
+                    bookings for a specific date.
+                  </div>
+                )}
+              </div>
+            </Panel>
+          </div>
         </div>
 
-        <aside className="space-y-3">
-          <Panel
-            title="Booking rules"
-            subtitle="These defaults keep appointments spaced and predictable."
-          >
-            <div className="space-y-3">
-              <div className="rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-3 py-2">
-                <span className="text-xs font-medium text-[#253047]">Timezone</span>
-                <p className="mt-0.5 text-sm font-bold text-[#111827]">
-                  {formatDoctorTimezoneLabel(profileTimezone)}
-                </p>
-                <p className="mt-1 text-[11px] leading-snug text-[#64748b]">
-                  Weekly slots and patient booking use your profile timezone (
-                  <span className="font-mono text-[10px]">{profileTimezone}</span>
-                  ).{' '}
-                  <Link
-                    to="/dashboard/profile"
-                    className="font-semibold text-[#8a37ff] hover:underline"
-                  >
-                    Change in Profile
-                  </Link>
-                </p>
+        <aside className="flex min-h-0 flex-col overflow-hidden xl:h-full">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-0.5">
+            <Panel
+              title="Booking rules"
+              subtitle="Slot length and buffer are saved to your doctor profile when you click Save."
+            >
+              <div className="space-y-3">
+                <div className="rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-3 py-2">
+                  <span className="text-xs font-medium text-[#253047]">Timezone</span>
+                  <p className="mt-0.5 text-sm font-bold text-[#111827]">
+                    {formatDoctorTimezoneLabel(profileTimezone)}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-snug text-[#64748b]">
+                    Weekly slots and patient booking use your profile timezone (
+                    <span className="font-mono text-[10px]">{profileTimezone}</span>
+                    ).{' '}
+                    <Link
+                      to="/dashboard/profile"
+                      className="font-semibold text-[#8a37ff] hover:underline"
+                    >
+                      Change in Profile
+                    </Link>
+                  </p>
+                </div>
+                <SelectField
+                  label="Slot duration"
+                  value={availability.slotDurationMinutes}
+                  options={SLOT_DURATIONS}
+                  suffix="min"
+                  onChange={(slotDurationMinutes) =>
+                    updateAvailability({ ...availability, slotDurationMinutes })
+                  }
+                />
+                <SelectField
+                  label="Buffer between visits"
+                  value={availability.bufferMinutes}
+                  options={BUFFER_OPTIONS}
+                  suffix="min"
+                  onChange={(bufferMinutes) =>
+                    updateAvailability({ ...availability, bufferMinutes })
+                  }
+                />
               </div>
-              <SelectField
-                label="Slot duration"
-                value={availability.slotDurationMinutes}
-                options={SLOT_DURATIONS}
-                suffix="min"
-                onChange={(slotDurationMinutes) =>
-                  updateAvailability({ ...availability, slotDurationMinutes })
-                }
-              />
-              <SelectField
-                label="Buffer between visits"
-                value={availability.bufferMinutes}
-                options={BUFFER_OPTIONS}
-                suffix="min"
-                onChange={(bufferMinutes) =>
-                  updateAvailability({ ...availability, bufferMinutes })
-                }
-              />
-            </div>
-          </Panel>
+            </Panel>
 
-          <Panel
-            title="Live preview"
-            subtitle="What patients will see once this is published."
-          >
-            <SummaryList availability={availability} />
-          </Panel>
+            <Panel
+              title="Live preview"
+              subtitle="What patients will see once this is published."
+            >
+              <SummaryList availability={availability} />
+            </Panel>
+          </div>
         </aside>
       </div>
     </div>

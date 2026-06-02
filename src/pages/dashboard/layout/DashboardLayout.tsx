@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import clsx from 'clsx'
 import { Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
 import { Sidebar } from '../components/Sidebar'
@@ -21,6 +22,14 @@ export function DashboardLayout() {
 
   const title = useMemo(
     () => titleFromPath(location.pathname),
+    [location.pathname],
+  )
+
+  const isSplitScrollView = useMemo(
+    () =>
+      location.pathname.startsWith('/dashboard/appointments') ||
+      location.pathname.startsWith('/dashboard/patient-records') ||
+      location.pathname.startsWith('/dashboard/availability'),
     [location.pathname],
   )
 
@@ -55,7 +64,14 @@ export function DashboardLayout() {
             onOpenSidebar={() => setSidebarOpen(true)}
           />
 
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 md:px-9 md:py-4">
+          <main
+            className={clsx(
+              'min-h-0 min-w-0 flex-1 overflow-x-hidden px-4 py-3 md:px-9 md:py-4',
+              isSplitScrollView
+                ? 'flex flex-col overflow-y-auto xl:overflow-hidden'
+                : 'overflow-y-auto',
+            )}
+          >
             <Outlet />
           </main>
         </div>

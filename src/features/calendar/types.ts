@@ -1,9 +1,4 @@
-export type AppointmentStatus =
-  | 'confirmed'
-  | 'ongoing'
-  | 'completed'
-  | 'cancelled'
-  | 'no-show'
+export type CalendarDisplayStatus = 'pending' | 'upcoming' | 'confirmed'
 
 export type AppointmentMode = 'video' | 'clinic' | 'home'
 
@@ -14,7 +9,7 @@ export type CalendarAppointment = {
   date: string
   start: string
   end: string
-  status: AppointmentStatus
+  status: CalendarDisplayStatus
   mode: AppointmentMode
   reason: string
   notes?: string

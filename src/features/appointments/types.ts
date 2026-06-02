@@ -40,6 +40,8 @@ export type DoctorAppointment = {
 export type AppointmentListResponse = {
   data: DoctorAppointment[]
   total: number
+  limit: number
+  offset: number
 }
 
 export type ApproveAppointmentPayload = {

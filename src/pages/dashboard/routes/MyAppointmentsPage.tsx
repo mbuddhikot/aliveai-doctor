@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -17,7 +17,8 @@ import {
   approveDoctorAppointment,
   DOCTOR_APPOINTMENTS_QUERY_KEY,
   fetchAppointmentPatientId,
-  listDoctorAppointments,
+  DOCTOR_APPOINTMENTS_PAGE_SIZE,
+  listDoctorAppointmentsPaginated,
   rejectDoctorAppointment,
   rescheduleDoctorAppointment,
 } from '../../../features/appointments/api/appointmentsApi'
@@ -33,7 +34,11 @@ import {
   type AppointmentFilterTab,
 } from '../../../features/appointments/constants'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
-import { filterAppointments, sortAppointments } from '../../../features/appointments/lib/filters'
+import {
+  applyClientTabFilter,
+  sortAppointments,
+  tabToApiStatus,
+} from '../../../features/appointments/lib/filters'
 import {
   appointmentDoctorTimezone,
   formatAppointmentDate,
@@ -285,7 +290,7 @@ function AppointmentDetailPanel({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <DetailRow
             icon={<FiCalendar className="h-4 w-4" />}
@@ -356,6 +361,58 @@ function AppointmentDetailPanel({
   )
 }
 
+const APPOINTMENTS_PAGE_SIZE = DOCTOR_APPOINTMENTS_PAGE_SIZE
+
+function AppointmentsPagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  disabled,
+}: {
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+  disabled?: boolean
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1)
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1)
+  const rangeStart = total === 0 ? 0 : safePage * pageSize + 1
+  const rangeEnd = Math.min((safePage + 1) * pageSize, total)
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[#edf0f4] bg-white px-3 py-2">
+      <p className="text-xs text-[#64748b]">
+        {total === 0
+          ? 'No results'
+          : `Showing ${rangeStart}–${rangeEnd} of ${total}`}
+      </p>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={disabled || safePage <= 0}
+          onClick={() => onPageChange(safePage - 1)}
+          className="h-8 cursor-pointer rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span className="min-w-[4.5rem] text-center text-xs font-semibold text-[#64748b]">
+          Page {safePage + 1} / {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={disabled || safePage >= totalPages - 1}
+          onClick={() => onPageChange(safePage + 1)}
+          className="h-8 cursor-pointer rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function DetailRow({
   icon,
   label,
@@ -384,6 +441,8 @@ export function MyAppointmentsPage() {
 
   const [activeTab, setActiveTab] = useState<AppointmentFilterTab>('all')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(0)
   const [selectedId, setSelectedId] = useState<string>()
   const [modalAction, setModalAction] = useState<ModalAction>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -395,16 +454,56 @@ export function MyAppointmentsPage() {
 
   const startCallMutation = useStartAppointment()
 
+  const apiStatus = tabToApiStatus(activeTab)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    setPage(0)
+  }, [activeTab, debouncedSearch, apiStatus])
+
   const appointmentsQuery = useQuery({
-    queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
-    queryFn: () => listDoctorAppointments({ doctorId: doctorId! }),
+    queryKey: [
+      DOCTOR_APPOINTMENTS_QUERY_KEY,
+      doctorId,
+      page,
+      APPOINTMENTS_PAGE_SIZE,
+      debouncedSearch,
+      apiStatus,
+    ],
+    queryFn: () =>
+      listDoctorAppointmentsPaginated({
+        doctorId: doctorId!,
+        status: apiStatus,
+        q: debouncedSearch || undefined,
+        limit: APPOINTMENTS_PAGE_SIZE,
+        offset: page * APPOINTMENTS_PAGE_SIZE,
+      }),
     enabled: Boolean(doctorId),
+    placeholderData: (previous) => previous,
   })
 
   const filteredAppointments = useMemo(() => {
     const list = appointmentsQuery.data?.data ?? []
-    return sortAppointments(filterAppointments(list, activeTab, search))
-  }, [activeTab, appointmentsQuery.data?.data, search])
+    return sortAppointments(applyClientTabFilter(list, activeTab))
+  }, [activeTab, appointmentsQuery.data?.data])
+
+  const totalAppointments = appointmentsQuery.data?.total ?? 0
+
+  useEffect(() => {
+    if (filteredAppointments.length === 0) {
+      setSelectedId(undefined)
+      return
+    }
+    if (!selectedId || !filteredAppointments.some((item) => item.id === selectedId)) {
+      setSelectedId(filteredAppointments[0].id)
+    }
+  }, [filteredAppointments, selectedId])
 
   const selectedAppointment =
     filteredAppointments.find((item) => item.id === selectedId) ??
@@ -468,12 +567,12 @@ export function MyAppointmentsPage() {
   const stats = useMemo(() => {
     const list = appointmentsQuery.data?.data ?? []
     return {
-      total: list.length,
+      total: totalAppointments,
       pending: list.filter((a) => a.workflow_status === 'pending').length,
       upcoming: list.filter((a) => a.status === 'upcoming').length,
       confirmed: list.filter((a) => a.workflow_status === 'confirmed').length,
     }
-  }, [appointmentsQuery.data?.data])
+  }, [appointmentsQuery.data?.data, totalAppointments])
 
   const invalidateAppointments = () => {
     void queryClient.invalidateQueries({
@@ -530,6 +629,10 @@ export function MyAppointmentsPage() {
       rescheduleDoctorAppointment({
         appointmentId: selectedAppointment!.id,
         doctorId: doctorId!,
+        doctorTimezone: appointmentDoctorTimezone(
+          selectedAppointment!,
+          profileTimezone,
+        ),
         payload,
       }),
     onSuccess: () => {
@@ -652,7 +755,7 @@ export function MyAppointmentsPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-7.25rem)] flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto xl:overflow-hidden">
       <section className="shrink-0 rounded-[10px] border border-[#dfe3ea] bg-white px-3 py-2.5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -713,7 +816,7 @@ export function MyAppointmentsPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search issue or ID"
+              placeholder="Search patient, issue, or ID"
               className="h-8 w-full rounded-[8px] border border-[#dfe3ea] bg-white pl-8 pr-2 text-sm outline-none focus:border-[#8a37ff]"
             />
           </label>
@@ -721,11 +824,11 @@ export function MyAppointmentsPage() {
       </section>
 
       {appointmentsQuery.isLoading ? (
-        <div className="flex flex-1 items-center justify-center rounded-[10px] border border-[#dfe3ea] bg-white text-sm font-medium text-[#64748b]">
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-[10px] border border-[#dfe3ea] bg-white text-sm font-medium text-[#64748b]">
           Loading appointments…
         </div>
       ) : appointmentsQuery.isError ? (
-        <section className="flex flex-1 items-center justify-center rounded-[10px] border border-red-200 bg-red-50 p-6 text-center">
+        <section className="flex min-h-0 flex-1 items-center justify-center rounded-[10px] border border-red-200 bg-red-50 p-6 text-center">
           <div>
             <p className="text-sm text-red-700">
               {extractApiErrorMessage(
@@ -743,15 +846,18 @@ export function MyAppointmentsPage() {
           </div>
         </section>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,38%)]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#dfe3ea] bg-[#fafafa]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,38%)] xl:grid-rows-1 xl:overflow-hidden">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#dfe3ea] bg-[#fafafa] xl:h-full">
             <div className="shrink-0 border-b border-[#edf0f4] bg-white px-3 py-2">
               <h2 className="text-sm font-bold text-black">
-                {filteredAppointments.length} appointment
-                {filteredAppointments.length === 1 ? '' : 's'}
+                {totalAppointments} appointment
+                {totalAppointments === 1 ? '' : 's'}
+                {activeTab === 'upcoming' && filteredAppointments.length !== totalAppointments
+                  ? ` · ${filteredAppointments.length} upcoming on this page`
+                  : ''}
               </h2>
             </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
               {filteredAppointments.length > 0 ? (
                 filteredAppointments.map((appointment) => (
                   <AppointmentListItem
@@ -771,33 +877,42 @@ export function MyAppointmentsPage() {
                 </div>
               )}
             </div>
+            <AppointmentsPagination
+              page={page}
+              pageSize={APPOINTMENTS_PAGE_SIZE}
+              total={totalAppointments}
+              disabled={appointmentsQuery.isFetching}
+              onPageChange={setPage}
+            />
           </section>
 
-          {selectedAppointment ? (
-            <AppointmentDetailPanel
-              appointment={selectedAppointment}
-              profileTimezone={profileTimezone}
-              prescriptions={appointmentPrescriptions}
-              onApprove={() => openModal('approve')}
-              onReject={() => openModal('reject')}
-              onReschedule={() => openModal('reschedule')}
-              onStartCall={() => {
-                if (!selectedAppointment) return
-                setStartCallError(null)
-                startCallMutation.mutate(selectedAppointment.id, {
-                  onError: (err) =>
-                    setStartCallError(startAppointmentErrorMessage(err)),
-                })
-              }}
-              isStartingCall={startCallMutation.isPending}
-              onCreatePrescription={openCreatePrescription}
-              onEditPrescription={openEditPrescription}
-            />
-          ) : (
-            <section className="flex items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
-              Select an appointment to view details.
-            </section>
-          )}
+          <div className="flex min-h-0 flex-col overflow-hidden xl:h-full">
+            {selectedAppointment ? (
+              <AppointmentDetailPanel
+                appointment={selectedAppointment}
+                profileTimezone={profileTimezone}
+                prescriptions={appointmentPrescriptions}
+                onApprove={() => openModal('approve')}
+                onReject={() => openModal('reject')}
+                onReschedule={() => openModal('reschedule')}
+                onStartCall={() => {
+                  if (!selectedAppointment) return
+                  setStartCallError(null)
+                  startCallMutation.mutate(selectedAppointment.id, {
+                    onError: (err) =>
+                      setStartCallError(startAppointmentErrorMessage(err)),
+                  })
+                }}
+                isStartingCall={startCallMutation.isPending}
+                onCreatePrescription={openCreatePrescription}
+                onEditPrescription={openEditPrescription}
+              />
+            ) : (
+              <section className="flex h-full min-h-0 items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
+                Select an appointment to view details.
+              </section>
+            )}
+          </div>
         </div>
       )}
 

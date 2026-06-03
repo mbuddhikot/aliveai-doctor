@@ -5,7 +5,6 @@ import clsx from 'clsx'
 import { FiRefreshCw } from 'react-icons/fi'
 import { useAuth } from '../../../features/auth/hooks/useAuth'
 import {
-  deleteDoctorDocument,
   getDoctorProfile,
   getDoctorVerificationStatus,
   saveDoctorProfile,
@@ -77,13 +76,6 @@ export function DoctorProfilePage() {
 
   const updateDocumentMutation = useMutation({
     mutationFn: updateDoctorDocument,
-    onSuccess: async () => {
-      await invalidateProfileData()
-    },
-  })
-
-  const deleteDocumentMutation = useMutation({
-    mutationFn: deleteDoctorDocument,
     onSuccess: async () => {
       await invalidateProfileData()
     },
@@ -245,15 +237,10 @@ export function DoctorProfilePage() {
           isUpdating={updateDocumentMutation.isPending}
           uploadError={
             uploadDocumentMutation.error ??
-            updateDocumentMutation.error ??
-            deleteDocumentMutation.error
+            updateDocumentMutation.error
           }
           onUploadBatch={uploadDocumentsBatch}
           onUpdateDocument={(params) => updateDocumentMutation.mutateAsync(params)}
-          isDeleting={deleteDocumentMutation.isPending}
-          onDeleteDocument={(documentId) =>
-            deleteDocumentMutation.mutateAsync(documentId)
-          }
         />
       </section>
     </div>

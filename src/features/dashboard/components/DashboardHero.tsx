@@ -65,78 +65,66 @@ export function DashboardHero({
   const { displayName, initials } = formatDoctorDisplayName(doctorName)
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(15,23,42,0.06)]">
+    <section className="relative overflow-hidden rounded-xl border border-slate-200/80 bg-gradient-to-br from-white via-white to-[#f7f5ff] shadow-[0_4px_16px_rgba(15,23,42,0.06)]">
       <div
-        className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#8a37ff] via-[#7c3aed] to-[#6366f1]"
+        className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[#8a37ff] via-[#7c3aed] to-[#6366f1]"
         aria-hidden
       />
 
-      <div className="relative px-5 py-6 sm:px-7 sm:py-7">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4 sm:gap-5">
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8a37ff] to-[#6d28d9] text-base font-bold text-white shadow-[0_8px_20px_rgba(138,55,255,0.28)] sm:h-16 sm:w-16 sm:text-lg"
-              aria-hidden
-            >
-              {initials}
-            </div>
+      <div className="relative flex flex-wrap items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5 sm:py-4">
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8a37ff] to-[#6d28d9] text-sm font-bold text-white shadow-[0_4px_12px_rgba(138,55,255,0.25)]"
+          aria-hidden
+        >
+          {initials}
+        </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                {today}
-              </p>
-              <p className="mt-1 text-sm font-medium text-slate-600">
-                Welcome back
-              </p>
-              <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-slate-900 sm:text-[1.75rem]">
-                {displayName}
-              </h1>
-              {specialty ? (
-                <p className="mt-1 text-sm font-medium text-[#8a37ff]">
-                  {specialty}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-slate-500">Physician dashboard</p>
-              )}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span
-                  className={clsx(
-                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset',
-                    badge.tone,
-                  )}
-                >
-                  <FiShield className="h-3.5 w-3.5 shrink-0" />
-                  {badge.text}
-                </span>
-              </div>
-            </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            {today}
+          </p>
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <h1 className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+              {displayName}
+            </h1>
+            {specialty ? (
+              <span className="text-sm font-medium text-[#8a37ff]">{specialty}</span>
+            ) : null}
           </div>
-
-          <button
-            type="button"
-            disabled={isRefreshing}
-            onClick={onRefresh}
-            className="inline-flex h-10 shrink-0 items-center gap-2 self-start rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 transition hover:border-[#8a37ff]/40 hover:bg-white hover:text-[#8a37ff] disabled:opacity-60 lg:self-center"
-          >
-            <FiRefreshCw
-              className={clsx('h-4 w-4', isRefreshing && 'animate-spin')}
-            />
-            Refresh data
-          </button>
-        </div>
-
-        <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-5">
-          {quickLinks.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 text-xs font-semibold text-slate-700 transition hover:border-[#8a37ff]/35 hover:bg-[#faf8ff] hover:text-[#7c3aed]"
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span
+              className={clsx(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
+                badge.tone,
+              )}
             >
-              <Icon className="h-3.5 w-3.5 text-[#8a37ff]" />
-              {label}
-            </Link>
-          ))}
+              <FiShield className="h-3 w-3 shrink-0" />
+              {badge.text}
+            </span>
+            {quickLinks.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white/80 px-2 text-[11px] font-semibold text-slate-600 transition hover:border-[#8a37ff]/35 hover:text-[#7c3aed]"
+              >
+                <Icon className="h-3 w-3 text-[#8a37ff]" />
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
+
+        <button
+          type="button"
+          disabled={isRefreshing}
+          onClick={onRefresh}
+          className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-[#8a37ff]/40 hover:text-[#8a37ff] disabled:opacity-60"
+        >
+          <FiRefreshCw
+            className={clsx('h-3.5 w-3.5', isRefreshing && 'animate-spin')}
+          />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
       </div>
     </section>
   )

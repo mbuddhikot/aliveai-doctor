@@ -407,7 +407,7 @@ export function DocumentsStep({
         previewingId={previewingId}
         onPreview={handlePreviewDocument}
         onUpdate={handleUpdateDocument}
-        onRequestDelete={setDocumentToDelete}
+        onRequestDelete={onDeleteDocument ? setDocumentToDelete : undefined}
       />
 
       {documentToDelete && onDeleteDocument ? (

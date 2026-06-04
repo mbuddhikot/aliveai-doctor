@@ -79,6 +79,11 @@ const STATUS_META: Record<
     className: 'bg-[#ecfdf5] text-[#047857] border-[#bbf7d0]',
     dot: 'bg-[#10b981]',
   },
+  past: {
+    label: 'Past',
+    className: 'bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]',
+    dot: 'bg-[#2563eb]',
+  },
 }
 
 const STATUS_FILTER_OPTIONS: { value: CalendarStatusFilter; label: string }[] = [
@@ -724,6 +729,7 @@ export function CalendarPage() {
         .length,
       confirmed: sourceAppointments.filter((item) => item.status === 'confirmed')
         .length,
+      past: sourceAppointments.filter((item) => item.status === 'past').length,
     }),
     [sourceAppointments],
   )

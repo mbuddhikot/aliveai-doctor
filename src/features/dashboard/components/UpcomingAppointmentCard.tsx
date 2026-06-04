@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { FiChevronRight, FiVideo } from 'react-icons/fi'
 import {
+  shouldShowAppointmentStatusBadge,
   StatusBadge,
   WorkflowBadge,
 } from '../../appointments/components/AppointmentBadges'
@@ -80,6 +81,7 @@ export function UpcomingAppointmentCard({
           <WorkflowBadge
             workflowStatus={appointment.workflow_status}
             doctorStatus={appointment.doctor_status}
+            appointment={appointment}
           />
           <FiChevronRight
             className={clsx(
@@ -96,7 +98,9 @@ export function UpcomingAppointmentCard({
             <p className="text-sm text-slate-600">{appointment.issue}</p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            <StatusBadge status={appointment.status} />
+            {shouldShowAppointmentStatusBadge(appointment) && (
+              <StatusBadge status={appointment.status} />
+            )}
             {formatFee(appointment.fee_amount, appointment.fee_currency) && (
               <span className="rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
                 {formatFee(appointment.fee_amount, appointment.fee_currency)}
@@ -105,7 +109,7 @@ export function UpcomingAppointmentCard({
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
-              to="/dashboard/appointments"
+              to={`/dashboard/appointments?appointment=${encodeURIComponent(appointment.id)}`}
               className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition hover:border-[#8a37ff]/40 hover:text-[#8a37ff]"
             >
               View details

@@ -1,4 +1,4 @@
-export type CalendarDisplayStatus = 'pending' | 'upcoming' | 'confirmed'
+export type CalendarDisplayStatus = 'pending' | 'upcoming' | 'confirmed' | 'past'
 
 export type AppointmentMode = 'video' | 'clinic' | 'home'
 

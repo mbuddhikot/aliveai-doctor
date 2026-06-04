@@ -57,3 +57,12 @@ export type RescheduleAppointmentPayload = {
   time: string
   duration_minutes?: number | null
 }
+
+/** From GET /v1/doctors/{doctor_id}/slots?date=YYYY-MM-DD */
+export type DoctorBookableSlotPeriod = 'Morning' | 'Afternoon' | 'Evening'
+
+export type DoctorBookableSlot = {
+  time: string
+  period: DoctorBookableSlotPeriod | string
+  available: boolean
+}

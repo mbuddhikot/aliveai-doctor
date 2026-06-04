@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
@@ -18,6 +19,7 @@ import {
   DOCTOR_APPOINTMENTS_QUERY_KEY,
   fetchAppointmentPatientId,
   DOCTOR_APPOINTMENTS_PAGE_SIZE,
+  listDoctorAppointments,
   listDoctorAppointmentsPaginated,
   rejectDoctorAppointment,
   rescheduleDoctorAppointment,
@@ -26,6 +28,7 @@ import { ApproveAppointmentModal } from '../../../features/appointments/componen
 import { RejectAppointmentModal } from '../../../features/appointments/components/RejectAppointmentModal'
 import { RescheduleAppointmentModal } from '../../../features/appointments/components/RescheduleAppointmentModal'
 import {
+  shouldShowAppointmentStatusBadge,
   StatusBadge,
   WorkflowBadge,
 } from '../../../features/appointments/components/AppointmentBadges'
@@ -34,8 +37,10 @@ import {
   type AppointmentFilterTab,
 } from '../../../features/appointments/constants'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
+import { canCreatePrescriptionForAppointment } from '../../../features/appointments/lib/appointmentStatus'
 import {
   applyClientTabFilter,
+  resolveTabForAppointment,
   sortAppointments,
   tabToApiStatus,
 } from '../../../features/appointments/lib/filters'
@@ -61,6 +66,7 @@ import {
   listDoctorPrescriptions,
   updateDoctorPrescription,
 } from '../../../features/prescriptions/api/prescriptionsApi'
+import { DeletePrescriptionConfirmModal } from '../../../features/prescriptions/components/DeletePrescriptionConfirmModal'
 import { PrescriptionCard } from '../../../features/prescriptions/components/PrescriptionCard'
 import { PrescriptionModal } from '../../../features/prescriptions/components/PrescriptionModal'
 import { buildPrescriptionPayload } from '../../../features/prescriptions/lib/buildPrescriptionPayload'
@@ -156,8 +162,11 @@ function AppointmentListItem({
         <WorkflowBadge
           workflowStatus={appointment.workflow_status}
           doctorStatus={appointment.doctor_status}
+          appointment={appointment}
         />
-        <StatusBadge status={appointment.status} />
+        {shouldShowAppointmentStatusBadge(appointment) && (
+          <StatusBadge status={appointment.status} />
+        )}
         {fee && (
           <span className="text-xs font-semibold text-[#64748b]">{fee}</span>
         )}
@@ -176,6 +185,7 @@ function AppointmentDetailPanel({
   onStartCall,
   onCreatePrescription,
   onEditPrescription,
+  onDeletePrescription,
   isStartingCall,
 }: {
   appointment: DoctorAppointment
@@ -187,6 +197,7 @@ function AppointmentDetailPanel({
   onStartCall: () => void
   onCreatePrescription: () => void
   onEditPrescription: (prescription: Prescription) => void
+  onDeletePrescription: (prescription: Prescription) => void
   isStartingCall?: boolean
 }) {
   const doctorTimezone = appointmentDoctorTimezone(appointment, profileTimezone)
@@ -198,30 +209,37 @@ function AppointmentDetailPanel({
     isConfirmed && appointment.status === 'upcoming' && !isRejected
   const canStartCall =
     isConfirmed && isAppointmentUpcoming(appointment)
-  const showPrescriptionAction = Boolean(
-    appointment.patient_name?.trim() || appointment.patient_id,
-  )
+  const canCreatePrescription = canCreatePrescriptionForAppointment(appointment)
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[12px] border border-[#dfe3ea] bg-white shadow-[0_8px_24px_rgba(31,41,55,0.04)]">
       <div className="shrink-0 border-b border-[#edf0f4] px-4 py-3">
-        <p className="text-base font-bold text-black">
-          {appointment.patient_name?.trim() ||
-            appointment.issue?.trim() ||
-            'Consultation'}
-        </p>
-        {appointment.patient_email && (
-          <p className="mt-1 text-sm text-[#64748b]">{appointment.patient_email}</p>
-        )}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <WorkflowBadge
-          workflowStatus={appointment.workflow_status}
-          doctorStatus={appointment.doctor_status}
-        />
-          <StatusBadge status={appointment.status} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold text-black">
+              {appointment.patient_name?.trim() ||
+                appointment.issue?.trim() ||
+                'Consultation'}
+            </p>
+            {appointment.patient_email && (
+              <p className="mt-1 text-sm text-[#64748b]">
+                {appointment.patient_email}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <WorkflowBadge
+              workflowStatus={appointment.workflow_status}
+              doctorStatus={appointment.doctor_status}
+              appointment={appointment}
+            />
+            {shouldShowAppointmentStatusBadge(appointment) && (
+              <StatusBadge status={appointment.status} />
+            )}
+          </div>
         </div>
 
-        {(isPending || canReschedule || canStartCall || showPrescriptionAction) && (
+        {(isPending || canReschedule || canStartCall || canCreatePrescription) && (
           <div className="mt-3 flex flex-wrap gap-2">
             {isPending && (
               <>
@@ -276,7 +294,7 @@ function AppointmentDetailPanel({
                 </button>
               )
             )}
-            {showPrescriptionAction && (
+            {canCreatePrescription && (
               <button
                 type="button"
                 onClick={onCreatePrescription}
@@ -352,6 +370,7 @@ function AppointmentDetailPanel({
                 key={prescription.id}
                 prescription={prescription}
                 onEdit={() => onEditPrescription(prescription)}
+                onDelete={() => onDeletePrescription(prescription)}
               />
             ))}
           </div>
@@ -435,6 +454,8 @@ function DetailRow({
 
 export function MyAppointmentsPage() {
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const deepLinkAppointmentId = searchParams.get('appointment')?.trim() || undefined
   const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
     useDoctorId()
   const { doctorTimezone: profileTimezone } = useDoctorTimezone()
@@ -450,9 +471,47 @@ export function MyAppointmentsPage() {
     useState<PrescriptionModalMode>('create')
   const [editingPrescription, setEditingPrescription] =
     useState<Prescription | null>(null)
+  const [prescriptionToDelete, setPrescriptionToDelete] =
+    useState<Prescription | null>(null)
   const [startCallError, setStartCallError] = useState<string | null>(null)
+  const [deepLinkAppointment, setDeepLinkAppointment] =
+    useState<DoctorAppointment | null>(null)
+  const [deepLinkResolving, setDeepLinkResolving] = useState(
+    Boolean(deepLinkAppointmentId),
+  )
 
   const startCallMutation = useStartAppointment()
+
+  useEffect(() => {
+    if (!deepLinkAppointmentId || !doctorId) {
+      setDeepLinkResolving(false)
+      setDeepLinkAppointment(null)
+      return
+    }
+
+    let cancelled = false
+    setDeepLinkResolving(true)
+
+    void listDoctorAppointments({ doctorId })
+      .then((response) => {
+        if (cancelled) return
+        const match = response.data.find(
+          (item) => item.id === deepLinkAppointmentId,
+        )
+        if (!match) return
+        setDeepLinkAppointment(match)
+        setActiveTab(resolveTabForAppointment(match))
+        setSelectedId(match.id)
+        setPage(0)
+      })
+      .finally(() => {
+        if (!cancelled) setDeepLinkResolving(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [deepLinkAppointmentId, doctorId])
 
   const apiStatus = tabToApiStatus(activeTab)
 
@@ -493,21 +552,49 @@ export function MyAppointmentsPage() {
     return sortAppointments(applyClientTabFilter(list, activeTab))
   }, [activeTab, appointmentsQuery.data?.data])
 
+  const listAppointments = useMemo(() => {
+    if (!deepLinkAppointment) return filteredAppointments
+    if (resolveTabForAppointment(deepLinkAppointment) !== activeTab) {
+      return filteredAppointments
+    }
+    if (filteredAppointments.some((item) => item.id === deepLinkAppointment.id)) {
+      return filteredAppointments
+    }
+    return [deepLinkAppointment, ...filteredAppointments]
+  }, [activeTab, filteredAppointments, deepLinkAppointment])
+
   const totalAppointments = appointmentsQuery.data?.total ?? 0
 
   useEffect(() => {
-    if (filteredAppointments.length === 0) {
+    if (deepLinkResolving) return
+
+    if (listAppointments.length === 0) {
       setSelectedId(undefined)
       return
     }
-    if (!selectedId || !filteredAppointments.some((item) => item.id === selectedId)) {
-      setSelectedId(filteredAppointments[0].id)
+
+    if (
+      deepLinkAppointmentId &&
+      listAppointments.some((item) => item.id === deepLinkAppointmentId)
+    ) {
+      setSelectedId(deepLinkAppointmentId)
+      return
     }
-  }, [filteredAppointments, selectedId])
+
+    if (!selectedId || !listAppointments.some((item) => item.id === selectedId)) {
+      setSelectedId(listAppointments[0].id)
+    }
+  }, [
+    listAppointments,
+    selectedId,
+    deepLinkResolving,
+    deepLinkAppointmentId,
+  ])
 
   const selectedAppointment =
-    filteredAppointments.find((item) => item.id === selectedId) ??
-    filteredAppointments[0]
+    listAppointments.find((item) => item.id === selectedId) ??
+    deepLinkAppointment ??
+    listAppointments[0]
 
   const prescriptionsQuery = useQuery({
     queryKey: [DOCTOR_PRESCRIPTIONS_QUERY_KEY, doctorId],
@@ -647,6 +734,14 @@ export function MyAppointmentsPage() {
 
   const createPrescriptionMutation = useMutation({
     mutationFn: async (payload: { diagnosis: string; notes: string }) => {
+      if (
+        !selectedAppointment ||
+        !canCreatePrescriptionForAppointment(selectedAppointment)
+      ) {
+        throw new Error(
+          'Prescriptions can only be created after the appointment is approved and confirmed.',
+        )
+      }
       let patientId = effectivePatientId
       if (!patientId) {
         patientId = await fetchAppointmentPatientId(
@@ -696,10 +791,12 @@ export function MyAppointmentsPage() {
   })
 
   const deletePrescriptionMutation = useMutation({
-    mutationFn: () => deleteDoctorPrescription(editingPrescription!.id),
+    mutationFn: (prescriptionId: string) =>
+      deleteDoctorPrescription(prescriptionId),
     onSuccess: () => {
       setModalAction(null)
       setEditingPrescription(null)
+      setPrescriptionToDelete(null)
       setActionError(null)
       invalidatePrescriptions()
     },
@@ -714,6 +811,15 @@ export function MyAppointmentsPage() {
   }
 
   const openCreatePrescription = () => {
+    if (
+      !selectedAppointment ||
+      !canCreatePrescriptionForAppointment(selectedAppointment)
+    ) {
+      setActionError(
+        'Prescriptions can only be created after the appointment is approved and confirmed.',
+      )
+      return
+    }
     setPrescriptionModalMode('create')
     setEditingPrescription(null)
     openModal('prescription')
@@ -723,6 +829,21 @@ export function MyAppointmentsPage() {
     setPrescriptionModalMode('edit')
     setEditingPrescription(prescription)
     openModal('prescription')
+  }
+
+  const openDeletePrescription = (prescription: Prescription) => {
+    setActionError(null)
+    setPrescriptionToDelete(prescription)
+  }
+
+  const closeDeletePrescriptionModal = () => {
+    if (deletePrescriptionMutation.isPending) return
+    setPrescriptionToDelete(null)
+  }
+
+  const confirmDeletePrescription = () => {
+    if (!prescriptionToDelete) return
+    deletePrescriptionMutation.mutate(prescriptionToDelete.id)
   }
 
   const closePrescriptionModal = () => {
@@ -823,9 +944,9 @@ export function MyAppointmentsPage() {
         </div>
       </section>
 
-      {appointmentsQuery.isLoading ? (
+      {appointmentsQuery.isLoading || deepLinkResolving ? (
         <div className="flex min-h-0 flex-1 items-center justify-center rounded-[10px] border border-[#dfe3ea] bg-white text-sm font-medium text-[#64748b]">
-          Loading appointments…
+          {deepLinkResolving ? 'Opening appointment…' : 'Loading appointments…'}
         </div>
       ) : appointmentsQuery.isError ? (
         <section className="flex min-h-0 flex-1 items-center justify-center rounded-[10px] border border-red-200 bg-red-50 p-6 text-center">
@@ -858,8 +979,8 @@ export function MyAppointmentsPage() {
               </h2>
             </div>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
-              {filteredAppointments.length > 0 ? (
-                filteredAppointments.map((appointment) => (
+              {listAppointments.length > 0 ? (
+                listAppointments.map((appointment) => (
                   <AppointmentListItem
                     key={appointment.id}
                     appointment={appointment}
@@ -906,6 +1027,7 @@ export function MyAppointmentsPage() {
                 isStartingCall={startCallMutation.isPending}
                 onCreatePrescription={openCreatePrescription}
                 onEditPrescription={openEditPrescription}
+                onDeletePrescription={openDeletePrescription}
               />
             ) : (
               <section className="flex h-full min-h-0 items-center justify-center rounded-[10px] border border-dashed border-[#cfd6e1] bg-white p-6 text-center text-sm text-[#64748b]">
@@ -934,9 +1056,10 @@ export function MyAppointmentsPage() {
         />
       )}
 
-      {modalAction === 'reschedule' && selectedAppointment && (
+      {modalAction === 'reschedule' && selectedAppointment && doctorId && (
         <RescheduleAppointmentModal
           appointment={selectedAppointment}
+          doctorId={doctorId}
           profileTimezone={profileTimezone}
           isSubmitting={rescheduleMutation.isPending}
           error={actionError}
@@ -945,7 +1068,10 @@ export function MyAppointmentsPage() {
         />
       )}
 
-      {modalAction === 'prescription' && selectedAppointment && (
+      {modalAction === 'prescription' &&
+        selectedAppointment &&
+        (prescriptionModalMode === 'edit' ||
+          canCreatePrescriptionForAppointment(selectedAppointment)) && (
         <PrescriptionModal
           mode={prescriptionModalMode}
           patientName={selectedAppointment.patient_name}
@@ -966,10 +1092,20 @@ export function MyAppointmentsPage() {
             }
           }}
           onDelete={
-            prescriptionModalMode === 'edit'
-              ? () => deletePrescriptionMutation.mutate()
+            prescriptionModalMode === 'edit' && editingPrescription
+              ? () => openDeletePrescription(editingPrescription)
               : undefined
           }
+        />
+      )}
+
+      {prescriptionToDelete && (
+        <DeletePrescriptionConfirmModal
+          prescription={prescriptionToDelete}
+          patientName={selectedAppointment?.patient_name}
+          isDeleting={deletePrescriptionMutation.isPending}
+          onClose={closeDeletePrescriptionModal}
+          onConfirm={confirmDeletePrescription}
         />
       )}
     </div>

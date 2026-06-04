@@ -210,18 +210,15 @@ export function DashboardHomePage() {
   const patientPreview = patientsQuery.data?.data ?? []
 
   return (
-    <div className="w-full pb-8">
-      <div className="sticky top-0 z-20 -mx-4 mb-6 bg-gradient-to-b from-[#f8f9ff] from-90% to-[#f4f6fb] px-4 pb-3 pt-0 shadow-[0_6px_16px_-8px_rgba(15,23,42,0.12)] md:-mx-9 md:px-9">
-        <DashboardHero
-          doctorName={doctor.full_name}
-          specialty={doctor.specialty}
-          verificationStatus={doctor.verification_status}
-          isRefreshing={isRefreshing}
-          onRefresh={handleRefresh}
-        />
-      </div>
+    <div className="w-full space-y-6 pb-8">
+      <DashboardHero
+        doctorName={doctor.full_name}
+        specialty={doctor.specialty}
+        verificationStatus={doctor.verification_status}
+        isRefreshing={isRefreshing}
+        onRefresh={handleRefresh}
+      />
 
-      <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <DashboardMetricCard
           title="Today"
@@ -257,7 +254,7 @@ export function DashboardHomePage() {
         <DashboardAnalyticsStrip
           analytics={analyticsQuery.data}
           isLoading={analyticsQuery.isLoading}
-          className="h-full min-h-[220px]"
+          className="min-h-[220px]"
         />
         <DashboardPatientsStrip
           patients={patientPreview}
@@ -425,7 +422,6 @@ export function DashboardHomePage() {
             )}
           </div>
         </PanelCard>
-      </div>
       </div>
     </div>
   )

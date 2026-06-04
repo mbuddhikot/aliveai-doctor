@@ -10,11 +10,15 @@ import type {
   AppointmentStatus,
   DoctorAppointment,
   DoctorAppointmentStatus,
+  DoctorBookableSlot,
   RejectAppointmentPayload,
   RescheduleAppointmentPayload,
 } from '../types'
 
 export const DOCTOR_APPOINTMENTS_QUERY_KEY = 'doctor-appointments'
+export const DOCTOR_SLOTS_QUERY_KEY = 'doctor-slots'
+
+const GET_DOCTOR_SLOTS_BASE = '/v1/doctors'
 
 /** Maps UI filter tab to `GET /v1/doctor/appointments` status query param. */
 export type DoctorAppointmentsApiStatus = DoctorAppointmentStatus
@@ -287,6 +291,50 @@ export async function rejectDoctorAppointment(params: {
   } catch (err) {
     throw new Error(
       extractApiErrorMessage(err, 'Unable to reject appointment'),
+      { cause: err },
+    )
+  }
+}
+
+function normalizeDoctorBookableSlots(data: unknown): DoctorBookableSlot[] {
+  const list = Array.isArray(data)
+    ? data
+    : isRecord(data) && Array.isArray(data.data)
+      ? data.data
+      : isRecord(data) && Array.isArray(data.slots)
+        ? data.slots
+        : []
+
+  return list
+    .filter(isRecord)
+    .map((item) => ({
+      time: String(item.time ?? '').trim(),
+      period: String(item.period ?? '').trim(),
+      available: item.available === true,
+    }))
+    .filter((slot) => slot.time.length > 0 && slot.period.length > 0)
+}
+
+/** GET /v1/doctors/{doctor_id}/slots?date=YYYY-MM-DD */
+export async function getDoctorBookableSlots(params: {
+  doctorId: string
+  date: string
+}): Promise<DoctorBookableSlot[]> {
+  const doctorId = params.doctorId.trim()
+  const date = params.date.trim()
+  if (!doctorId || !date) {
+    return []
+  }
+
+  try {
+    const { data } = await apiClient.get<unknown>(
+      `${GET_DOCTOR_SLOTS_BASE}/${encodeURIComponent(doctorId)}/slots`,
+      { params: { date } },
+    )
+    return normalizeDoctorBookableSlots(data)
+  } catch (err) {
+    throw new Error(
+      extractApiErrorMessage(err, 'Unable to load available slots'),
       { cause: err },
     )
   }

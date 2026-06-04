@@ -12,7 +12,6 @@ import {
   FiRefreshCw,
   FiSave,
   FiTrash2,
-  FiVideo,
 } from 'react-icons/fi'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
@@ -25,7 +24,6 @@ import {
   saveDoctorAvailability,
 } from '../../../features/availability/api/availabilityApi'
 import type {
-  AvailabilityException,
   AvailabilitySlot,
   ConsultationMode,
   DayAvailability,
@@ -78,15 +76,6 @@ function createSlot(start = '09:00', end = '09:30'): AvailabilitySlot {
     start,
     end,
     modes: ['video'],
-  }
-}
-
-function createException(): AvailabilityException {
-  return {
-    id: createId(),
-    date: new Date().toISOString().slice(0, 10),
-    reason: 'Out of office',
-    unavailable: true,
   }
 }
 
@@ -424,45 +413,6 @@ function DayEditor({
   )
 }
 
-function ExceptionRow({
-  item,
-  onChange,
-  onRemove,
-}: {
-  item: AvailabilityException
-  onChange: (item: AvailabilityException) => void
-  onRemove: () => void
-}) {
-  return (
-    <div className="grid gap-3 rounded-md border border-[#edf0f4] bg-white p-3 sm:grid-cols-[150px_1fr_96px_36px] sm:items-center">
-      <input
-        type="date"
-        value={item.date}
-        onChange={(event) => onChange({ ...item, date: event.target.value })}
-        className="h-10 rounded-md border border-[#dfe3ea] px-3 text-sm font-semibold outline-none focus:border-[#8a37ff]"
-      />
-      <input
-        type="text"
-        value={item.reason}
-        onChange={(event) => onChange({ ...item, reason: event.target.value })}
-        placeholder="Reason"
-        className="h-10 rounded-md border border-[#dfe3ea] px-3 text-sm outline-none focus:border-[#8a37ff]"
-      />
-      <span className="inline-flex h-9 items-center justify-center rounded-md bg-[#fff7ed] px-3 text-xs font-bold text-[#c2410c]">
-        Day off
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-100 text-red-500 transition hover:bg-red-50"
-        aria-label="Remove exception"
-      >
-        <FiTrash2 className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
 function SummaryList({ availability }: { availability: DoctorAvailability }) {
   const activeDays = availability.weekly.filter((day) => day.enabled)
 
@@ -580,13 +530,6 @@ export function AvailabilityPage() {
       weekly: availability.weekly.map((day) =>
         day.id === dayId ? nextDay : day,
       ),
-    })
-  }
-
-  const addException = () => {
-    updateAvailability({
-      ...availability,
-      exceptions: [createException(), ...availability.exceptions],
     })
   }
 
@@ -717,7 +660,7 @@ export function AvailabilityPage() {
         )}
       </section>
 
-      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2">
         <StatCard
           label="Active days"
           value={`${activeDays}/7`}
@@ -729,12 +672,6 @@ export function AvailabilityPage() {
           value={`${weeklyHours}h`}
           hint={`${weeklySlots} blocks`}
           icon={<FiClock className="h-4 w-4" />}
-        />
-        <StatCard
-          label="Default mode"
-          value="Mixed"
-          hint="Video & clinic"
-          icon={<FiVideo className="h-4 w-4" />}
         />
       </div>
 
@@ -758,53 +695,6 @@ export function AvailabilityPage() {
                     onChange={(nextDay) => updateDay(day.id, nextDay)}
                   />
                 ))}
-              </div>
-            </Panel>
-
-            <Panel
-              title="Days off and exceptions"
-              subtitle="Block holidays, conferences, or personal leave without changing your recurring week."
-              action={
-                <button
-                  type="button"
-                  onClick={addException}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#dfe3ea] bg-white px-3 text-sm font-bold text-[#8a37ff] transition hover:bg-[#f3edff]"
-                >
-                  <FiPlus className="h-4 w-4" />
-                  Add day off
-                </button>
-              }
-            >
-              <div className="space-y-3">
-                {availability.exceptions.length > 0 ? (
-                  availability.exceptions.map((exception) => (
-                    <ExceptionRow
-                      key={exception.id}
-                      item={exception}
-                      onChange={(nextException) =>
-                        updateAvailability({
-                          ...availability,
-                          exceptions: availability.exceptions.map((item) =>
-                            item.id === exception.id ? nextException : item,
-                          ),
-                        })
-                      }
-                      onRemove={() =>
-                        updateAvailability({
-                          ...availability,
-                          exceptions: availability.exceptions.filter(
-                            (item) => item.id !== exception.id,
-                          ),
-                        })
-                      }
-                    />
-                  ))
-                ) : (
-                  <div className="rounded-md border border-dashed border-[#cfd6e1] bg-[#fbfcfe] p-4 text-sm text-[#64748b]">
-                    No exceptions yet. Add a day off when you need to pause
-                    bookings for a specific date.
-                  </div>
-                )}
               </div>
             </Panel>
           </div>

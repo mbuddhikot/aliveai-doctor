@@ -1,6 +1,7 @@
 import { FiX } from 'react-icons/fi'
 import type { DoctorAnalyticsResponse } from '../types'
 import { formatFee } from '../../appointments/lib/format'
+import { formatAnalyticsDateRange } from '../lib/formatAnalyticsDate'
 
 type AnalyticsModalProps = {
   analytics: DoctorAnalyticsResponse
@@ -39,7 +40,7 @@ export function AnalyticsModal({ analytics, onClose }: AnalyticsModalProps) {
           <div>
             <h2 className="text-xl font-bold text-black">Practice analytics</h2>
             <p className="mt-1 text-sm text-[#64748b]">
-              {analytics.range.from} – {analytics.range.to}
+              {formatAnalyticsDateRange(analytics.range.from, analytics.range.to)}
             </p>
           </div>
           <button
@@ -77,7 +78,7 @@ export function AnalyticsModal({ analytics, onClose }: AnalyticsModalProps) {
 
           {analytics.top_issues.length > 0 && (
             <div>
-              <h3 className="mb-2 text-sm font-bold text-[#111827]">Top issues</h3>
+              <h3 className="mb-2 text-sm font-bold text-[#111827]">Common Conditions</h3>
               <div className="space-y-2">
                 {analytics.top_issues.slice(0, 8).map((item) => (
                   <div

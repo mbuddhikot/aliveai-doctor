@@ -18,6 +18,7 @@ import {
   listDoctorAppointments,
 } from '../../../features/appointments/api/appointmentsApi'
 import {
+  shouldShowAppointmentStatusBadge,
   StatusBadge,
   WorkflowBadge,
 } from '../../../features/appointments/components/AppointmentBadges'
@@ -210,15 +211,22 @@ function VisitRow({
           <WorkflowBadge
             workflowStatus={appointment.workflow_status}
             doctorStatus={appointment.doctor_status}
+            appointment={appointment}
           />
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <StatusBadge status={appointment.status} />
-        {fee && (
-          <span className="shrink-0 text-xs font-semibold text-[#64748b]">{fee}</span>
-        )}
-      </div>
+      {(shouldShowAppointmentStatusBadge(appointment) || fee) && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          {shouldShowAppointmentStatusBadge(appointment) && (
+            <StatusBadge status={appointment.status} />
+          )}
+          {fee && (
+            <span className="ml-auto shrink-0 text-xs font-semibold text-[#64748b]">
+              {fee}
+            </span>
+          )}
+        </div>
+      )}
       <div className="mt-3 border-t border-[#f1f5f9] pt-3">
         {hasPrescription ? (
           <button

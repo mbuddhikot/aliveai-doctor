@@ -1,10 +1,11 @@
 import { DateTime } from 'luxon'
-import { FiEdit2, FiFileText } from 'react-icons/fi'
+import { FiEdit2, FiFileText, FiTrash2 } from 'react-icons/fi'
 import type { Prescription } from '../types'
 
 type PrescriptionCardProps = {
   prescription: Prescription
   onEdit: () => void
+  onDelete: () => void
 }
 
 function formatDate(iso: string): string {
@@ -18,7 +19,11 @@ function displayText(prescription: Prescription): string {
   return first?.instructions?.trim() || 'No notes'
 }
 
-export function PrescriptionCard({ prescription, onEdit }: PrescriptionCardProps) {
+export function PrescriptionCard({
+  prescription,
+  onEdit,
+  onDelete,
+}: PrescriptionCardProps) {
   const preview = displayText(prescription)
   const truncated =
     preview.length > 160 ? `${preview.slice(0, 160).trim()}…` : preview
@@ -43,14 +48,24 @@ export function PrescriptionCard({ prescription, onEdit }: PrescriptionCardProps
             {formatDate(prescription.created_at)}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-[#dfe3ea] bg-white px-2.5 text-xs font-bold text-[#64748b] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
-        >
-          <FiEdit2 className="h-3.5 w-3.5" />
-          Edit
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-[#dfe3ea] bg-white px-2.5 text-xs font-bold text-[#64748b] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
+          >
+            <FiEdit2 className="h-3.5 w-3.5" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-[#fecaca] bg-red-50 px-2.5 text-xs font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100"
+          >
+            <FiTrash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
+        </div>
       </div>
     </article>
   )

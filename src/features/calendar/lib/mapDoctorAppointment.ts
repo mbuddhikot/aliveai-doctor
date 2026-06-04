@@ -1,4 +1,8 @@
 import {
+  isActiveConfirmedAppointment,
+  isPastOrDoneAppointment,
+} from '../../appointments/lib/appointmentStatus'
+import {
   appointmentDoctorTimezone,
   isoToDateInput,
   isoToTimeInput,
@@ -17,10 +21,7 @@ export function isPendingAppointment(appointment: DoctorAppointment): boolean {
 }
 
 export function isConfirmedAppointment(appointment: DoctorAppointment): boolean {
-  return (
-    appointment.doctor_status === 'confirm' ||
-    appointment.workflow_status === 'confirmed'
-  )
+  return isActiveConfirmedAppointment(appointment)
 }
 
 /** Mutually exclusive calendar color — used for pills, badges, and filters. */
@@ -28,6 +29,7 @@ export function calendarDisplayStatus(
   appointment: DoctorAppointment,
 ): CalendarDisplayStatus {
   if (isPendingAppointment(appointment)) return 'pending'
+  if (isPastOrDoneAppointment(appointment)) return 'past'
   if (isConfirmedAppointment(appointment)) return 'confirmed'
   if (
     appointment.status === 'upcoming' ||
@@ -49,7 +51,12 @@ export function isCalendarEligible(appointment: DoctorAppointment): boolean {
   }
 
   const status = calendarDisplayStatus(appointment)
-  return status === 'pending' || status === 'confirmed' || status === 'upcoming'
+  return (
+    status === 'pending' ||
+    status === 'confirmed' ||
+    status === 'upcoming' ||
+    status === 'past'
+  )
 }
 
 export function matchesCalendarStatusFilter(

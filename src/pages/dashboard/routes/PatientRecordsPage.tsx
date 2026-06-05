@@ -35,6 +35,7 @@ import {
   buildPatientDirectory,
   filterPatients,
 } from '../../../features/patients/lib/buildPatientDirectory'
+import { buildManageAppointmentsPath } from '../../../features/patients/lib/resolveManageAppointment'
 import type { PatientSummary } from '../../../features/patients/types'
 import {
   DOCTOR_PRESCRIPTIONS_QUERY_KEY,
@@ -310,7 +311,7 @@ function PatientDetailPanel({
         </div>
 
         <Link
-          to="/dashboard/appointments"
+          to={buildManageAppointmentsPath(patient)}
           className="mt-4 inline-flex text-sm font-bold text-[#8a37ff] hover:underline"
         >
           Manage in My Appointments →

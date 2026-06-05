@@ -39,15 +39,15 @@ export function DashboardPatientsStrip({
         </div>
       </div>
 
-      <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+      <div className="scrollbar-violet mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
         {isLoading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100" />
             ))}
           </div>
         ) : patients.length > 0 ? (
-          patients.slice(0, 6).map((patient) => (
+          patients.map((patient) => (
             <div
               key={patient.user_id}
               className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5 transition hover:border-[#e9d5ff] hover:bg-[#faf8ff]"

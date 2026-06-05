@@ -39,6 +39,7 @@ import {
   listDoctorPatients,
 } from '../../../features/patients/api/patientsApi'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
+import { toastError } from '../../../lib/toast'
 
 function ScheduleRow({
   label,
@@ -163,7 +164,10 @@ export function DashboardHomePage() {
   const handleStart = (appointmentId: string) => {
     setStartError(null)
     startMutation.mutate(appointmentId, {
-      onError: (err) => setStartError(startAppointmentErrorMessage(err)),
+      onError: (err) => {
+        setStartError(startAppointmentErrorMessage(err))
+        toastError(err, 'Unable to start appointment')
+      },
     })
   }
 
@@ -250,7 +254,7 @@ export function DashboardHomePage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2 lg:min-h-0">
         <DashboardAnalyticsStrip
           analytics={analyticsQuery.data}
           isLoading={analyticsQuery.isLoading}
@@ -260,7 +264,7 @@ export function DashboardHomePage() {
           patients={patientPreview}
           total={patientTotal}
           isLoading={patientsQuery.isLoading}
-          className="min-h-[220px]"
+          className="min-h-[220px] lg:h-full lg:min-h-0"
         />
       </div>
 

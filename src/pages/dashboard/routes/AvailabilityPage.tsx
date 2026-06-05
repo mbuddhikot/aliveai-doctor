@@ -16,6 +16,7 @@ import {
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import { formatDoctorTimezoneLabel } from '../../../lib/doctorTimezone'
+import { toastError, toastSuccess } from '../../../lib/toast'
 import {
   createDefaultAvailability,
   DOCTOR_AVAILABILITY_QUERY_KEY,
@@ -535,7 +536,9 @@ export function AvailabilityPage() {
 
   const saveAvailability = async () => {
     if (hasValidationErrors) {
-      setSaveMessage('Fix the highlighted availability issues before saving.')
+      const message = 'Fix the highlighted availability issues before saving.'
+      setSaveMessage(message)
+      toastError(new Error(message), message)
       return
     }
 
@@ -545,13 +548,15 @@ export function AvailabilityPage() {
       void queryClient.invalidateQueries({
         queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId],
       })
-      setSaveMessage(
-        'Availability and booking rules saved successfully. Patients can book these times.',
-      )
+      const message =
+        'Availability and booking rules saved successfully. Patients can book these times.'
+      setSaveMessage(message)
+      toastSuccess('Availability saved')
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Unable to save availability.'
       setSaveMessage(message)
+      toastError(err, 'Unable to save availability')
     }
   }
 

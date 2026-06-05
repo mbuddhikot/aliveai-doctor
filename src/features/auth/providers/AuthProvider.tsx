@@ -19,6 +19,7 @@ import {
   writeTokenToStorage,
   writeUserToStorage,
 } from '../utils/storage'
+import { toastSuccess } from '../../../lib/toast'
 import { AuthContext } from '../context'
 import type {
   AuthContextValue,
@@ -174,6 +175,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setUser(accountUser)
       writeUserToStorage(accountUser, persist)
+      toastSuccess('Signed in successfully')
       return accountUser
     },
     [loginMutateAsync],
@@ -232,6 +234,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setUser(accountUser)
       writeUserToStorage(accountUser)
+      toastSuccess('Signed in successfully')
       return accountUser
     },
     [googleLoginMutateAsync],
@@ -241,6 +244,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null)
     clearUserStorage()
     clearTokenStorage()
+    toastSuccess('Logged out successfully')
   }, [])
 
   const resetAuthError = useCallback(() => {

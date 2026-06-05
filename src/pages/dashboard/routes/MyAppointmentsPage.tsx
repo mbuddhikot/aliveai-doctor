@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -59,6 +59,7 @@ import {
   useStartAppointment,
 } from '../../../features/dashboard/hooks/useStartAppointment'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
+import { toastError, toastSuccess } from '../../../lib/toast'
 import {
   createDoctorPrescription,
   deleteDoctorPrescription,
@@ -454,7 +455,7 @@ function DetailRow({
 
 export function MyAppointmentsPage() {
   const queryClient = useQueryClient()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const deepLinkAppointmentId = searchParams.get('appointment')?.trim() || undefined
   const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
     useDoctorId()
@@ -481,6 +482,23 @@ export function MyAppointmentsPage() {
   )
 
   const startCallMutation = useStartAppointment()
+
+  const handleSelectAppointment = useCallback(
+    (appointmentId: string) => {
+      setSelectedId(appointmentId)
+      if (!deepLinkAppointmentId) return
+      setDeepLinkAppointment(null)
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('appointment')
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [deepLinkAppointmentId, setSearchParams],
+  )
 
   useEffect(() => {
     if (!deepLinkAppointmentId || !doctorId) {
@@ -573,23 +591,10 @@ export function MyAppointmentsPage() {
       return
     }
 
-    if (
-      deepLinkAppointmentId &&
-      listAppointments.some((item) => item.id === deepLinkAppointmentId)
-    ) {
-      setSelectedId(deepLinkAppointmentId)
-      return
-    }
-
     if (!selectedId || !listAppointments.some((item) => item.id === selectedId)) {
       setSelectedId(listAppointments[0].id)
     }
-  }, [
-    listAppointments,
-    selectedId,
-    deepLinkResolving,
-    deepLinkAppointmentId,
-  ])
+  }, [listAppointments, selectedId, deepLinkResolving])
 
   const selectedAppointment =
     listAppointments.find((item) => item.id === selectedId) ??
@@ -684,9 +689,12 @@ export function MyAppointmentsPage() {
       setModalAction(null)
       setActionError(null)
       invalidateAppointments()
+      toastSuccess('Appointment approved')
     },
     onError: (err) => {
-      setActionError(extractApiErrorMessage(err, 'Unable to approve'))
+      const message = extractApiErrorMessage(err, 'Unable to approve')
+      setActionError(message)
+      toastError(err, 'Unable to approve')
     },
   })
 
@@ -701,9 +709,12 @@ export function MyAppointmentsPage() {
       setModalAction(null)
       setActionError(null)
       invalidateAppointments()
+      toastSuccess('Appointment rejected')
     },
     onError: (err) => {
-      setActionError(extractApiErrorMessage(err, 'Unable to reject'))
+      const message = extractApiErrorMessage(err, 'Unable to reject')
+      setActionError(message)
+      toastError(err, 'Unable to reject')
     },
   })
 
@@ -726,9 +737,12 @@ export function MyAppointmentsPage() {
       setModalAction(null)
       setActionError(null)
       invalidateAppointments()
+      toastSuccess('Appointment rescheduled')
     },
     onError: (err) => {
-      setActionError(extractApiErrorMessage(err, 'Unable to reschedule'))
+      const message = extractApiErrorMessage(err, 'Unable to reschedule')
+      setActionError(message)
+      toastError(err, 'Unable to reschedule')
     },
   })
 
@@ -767,9 +781,12 @@ export function MyAppointmentsPage() {
       setModalAction(null)
       setActionError(null)
       invalidatePrescriptions()
+      toastSuccess('Prescription created')
     },
     onError: (err) => {
-      setActionError(extractApiErrorMessage(err, 'Unable to save prescription'))
+      const message = extractApiErrorMessage(err, 'Unable to save prescription')
+      setActionError(message)
+      toastError(err, 'Unable to save prescription')
     },
   })
 
@@ -784,9 +801,12 @@ export function MyAppointmentsPage() {
       setEditingPrescription(null)
       setActionError(null)
       invalidatePrescriptions()
+      toastSuccess('Prescription updated')
     },
     onError: (err) => {
-      setActionError(extractApiErrorMessage(err, 'Unable to update prescription'))
+      const message = extractApiErrorMessage(err, 'Unable to update prescription')
+      setActionError(message)
+      toastError(err, 'Unable to update prescription')
     },
   })
 
@@ -799,9 +819,12 @@ export function MyAppointmentsPage() {
       setPrescriptionToDelete(null)
       setActionError(null)
       invalidatePrescriptions()
+      toastSuccess('Prescription deleted')
     },
     onError: (err) => {
-      setActionError(extractApiErrorMessage(err, 'Unable to delete prescription'))
+      const message = extractApiErrorMessage(err, 'Unable to delete prescription')
+      setActionError(message)
+      toastError(err, 'Unable to delete prescription')
     },
   })
 
@@ -986,7 +1009,7 @@ export function MyAppointmentsPage() {
                     appointment={appointment}
                     profileTimezone={profileTimezone}
                     isSelected={selectedAppointment?.id === appointment.id}
-                    onSelect={() => setSelectedId(appointment.id)}
+                    onSelect={() => handleSelectAppointment(appointment.id)}
                   />
                 ))
               ) : (
@@ -1020,8 +1043,11 @@ export function MyAppointmentsPage() {
                   if (!selectedAppointment) return
                   setStartCallError(null)
                   startCallMutation.mutate(selectedAppointment.id, {
-                    onError: (err) =>
-                      setStartCallError(startAppointmentErrorMessage(err)),
+                    onError: (err) => {
+                      const message = startAppointmentErrorMessage(err)
+                      setStartCallError(message)
+                      toastError(err, 'Unable to start appointment')
+                    },
                   })
                 }}
                 isStartingCall={startCallMutation.isPending}

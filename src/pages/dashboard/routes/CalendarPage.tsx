@@ -5,13 +5,10 @@ import clsx from 'clsx'
 import { DateTime } from 'luxon'
 import {
   FiAlertCircle,
-  FiCalendar,
   FiChevronLeft,
   FiChevronRight,
-  FiClock,
   FiMapPin,
   FiSearch,
-  FiUser,
   FiVideo,
   FiX,
 } from 'react-icons/fi'
@@ -30,7 +27,6 @@ import {
 } from '../../../features/dashboard/hooks/useStartAppointment'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
-import { extractApiErrorMessage } from '../../../lib/apiClient'
 import {
   mapDoctorAppointmentsToCalendar,
   type CalendarStatusFilter,
@@ -126,17 +122,28 @@ function formatWeekRangeLabel(dateKey: string, timezone: string): string {
 function StatPill({
   label,
   value,
-  icon,
+  accent = 'violet',
 }: {
   label: string
   value: string
-  icon: ReactNode
+  accent?: 'violet' | 'amber' | 'emerald' | 'blue'
 }) {
+  const styles = {
+    violet: 'border-[#decaff] bg-[#f3edff] text-[#8a37ff]',
+    amber: 'border-amber-200 bg-amber-50 text-amber-800',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    blue: 'border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]',
+  }[accent]
+
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-2 py-1 text-xs">
-      <span className="text-[#8a37ff]">{icon}</span>
-      <span className="font-bold text-black">{value}</span>
-      <span className="text-[#64748b]">{label}</span>
+    <span
+      className={clsx(
+        'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm',
+        styles,
+      )}
+    >
+      <span className="text-base font-bold leading-none text-black">{value}</span>
+      <span className="font-medium">{label}</span>
     </span>
   )
 }
@@ -161,59 +168,6 @@ const VIEW_TABS: { id: CalendarView; label: string }[] = [
   { id: 'week', label: 'Week' },
   { id: 'day', label: 'Day' },
 ]
-
-function CalendarViewSearchBar({
-  view,
-  onViewChange,
-  search,
-  onSearchChange,
-}: {
-  view: CalendarView
-  onViewChange: (value: CalendarView) => void
-  search: string
-  onSearchChange: (value: string) => void
-}) {
-  return (
-    <div className="flex h-8 min-w-0 flex-1 items-stretch overflow-hidden rounded-md border border-[#dfe3ea] bg-white focus-within:border-[#8a37ff] focus-within:ring-1 focus-within:ring-[#8a37ff]/25">
-      <div
-        className="flex shrink-0 items-stretch border-r border-[#dfe3ea] bg-[#f8fafc]"
-        role="tablist"
-        aria-label="Calendar view"
-      >
-        {VIEW_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={view === tab.id}
-            onClick={() => onViewChange(tab.id)}
-            className={clsx(
-              'px-2.5 text-[10px] font-bold transition sm:px-3 sm:text-[11px]',
-              view === tab.id
-                ? 'bg-white text-[#8a37ff]'
-                : 'text-[#64748b] hover:bg-white/60 hover:text-[#111827]',
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <label className="relative flex min-w-0 flex-1 items-center">
-        <FiSearch
-          className="pointer-events-none absolute left-2 h-3 w-3 text-[#94a3b8]"
-          aria-hidden
-        />
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search patient or reason"
-          className="h-full w-full min-w-0 border-0 bg-transparent py-0 pl-7 pr-2 text-xs text-[#111827] outline-none placeholder:text-[#94a3b8] focus:ring-0"
-        />
-      </label>
-    </div>
-  )
-}
 
 function AppointmentPill({
   appointment,
@@ -885,60 +839,61 @@ export function CalendarPage() {
 
   return (
     <div className="space-y-2">
-      <section className="rounded-lg border border-[#dfe3ea] bg-white px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h1 className="text-base font-bold text-black sm:text-lg">
-              Calendar
-            </h1>
-            <div className="flex flex-wrap gap-1.5">
-              <StatPill
-                label="today"
-                value={String(todayAppointments.length)}
-                icon={<FiClock className="h-3.5 w-3.5" />}
-              />
-              <StatPill
-                label="pending"
-                value={String(statusCounts.pending)}
-                icon={<FiAlertCircle className="h-3.5 w-3.5" />}
-              />
-              <StatPill
-                label="upcoming"
-                value={String(statusCounts.upcoming)}
-                icon={<FiCalendar className="h-3.5 w-3.5" />}
-              />
-              <StatPill
-                label="confirmed"
-                value={String(statusCounts.confirmed)}
-                icon={<FiUser className="h-3.5 w-3.5" />}
-              />
-            </div>
+      <section className="shrink-0 rounded-[10px] border border-[#dfe3ea] bg-white px-3 py-2.5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatPill
+              label="Today"
+              value={String(todayAppointments.length)}
+              accent="violet"
+            />
+            <StatPill
+              label="Pending"
+              value={String(statusCounts.pending)}
+              accent="amber"
+            />
+            <StatPill
+              label="Upcoming"
+              value={String(statusCounts.upcoming)}
+              accent="blue"
+            />
+            <StatPill
+              label="Confirmed"
+              value={String(statusCounts.confirmed)}
+              accent="emerald"
+            />
           </div>
-          <div className="flex items-center gap-1">
+
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={navigatePrev}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
-              aria-label="Previous"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#dfe3ea] bg-white text-[#253047] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
+              aria-label="Previous period"
             >
-              <FiChevronLeft className="h-3.5 w-3.5" />
+              <FiChevronLeft className="h-4 w-4" />
             </button>
-            <span className="hidden min-w-[120px] text-center text-xs font-bold text-black sm:inline">
-              {navLabel}
-            </span>
+            <div className="min-w-0 text-center">
+              <p className="truncate text-sm font-bold text-black">{navLabel}</p>
+              {view !== 'day' ? (
+                <p className="truncate text-[11px] text-[#64748b]">
+                  Selected: {selectedDayLabel}
+                </p>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={navigateNext}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#dfe3ea] bg-white text-[#253047] hover:bg-[#f8fafc]"
-              aria-label="Next"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#dfe3ea] bg-white text-[#253047] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
+              aria-label="Next period"
             >
-              <FiChevronRight className="h-3.5 w-3.5" />
+              <FiChevronRight className="h-4 w-4" />
             </button>
             {!isOnToday ? (
               <button
                 type="button"
                 onClick={goToToday}
-                className="h-7 rounded-md border border-[#dfe3ea] bg-white px-2.5 text-[11px] font-bold text-[#253047] transition hover:bg-[#f8fafc]"
+                className="ml-0.5 inline-flex h-8 shrink-0 items-center rounded-[8px] border border-[#dfe3ea] bg-white px-3 text-xs font-bold text-[#253047] transition hover:border-[#8a37ff] hover:text-[#8a37ff]"
               >
                 Today
               </button>
@@ -946,34 +901,63 @@ export function CalendarPage() {
           </div>
         </div>
 
-        <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:items-center">
-          <CalendarViewSearchBar
-            view={view}
-            onViewChange={setView}
-            search={search}
-            onSearchChange={setSearch}
-          />
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(event.target.value as CalendarStatusFilter)
-            }
-            className="h-8 w-full shrink-0 rounded-md border border-[#dfe3ea] bg-white px-2 text-[10px] font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-[128px]"
+        <div className="mt-2 flex flex-col gap-2 border-t border-[#eef1f5] pt-2 lg:flex-row lg:items-center lg:justify-between">
+          <div
+            className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5"
+            role="tablist"
+            aria-label="Calendar view"
           >
-            {STATUS_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
+            {VIEW_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={view === tab.id}
+                onClick={() => setView(tab.id)}
+                className={clsx(
+                  'shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition',
+                  view === tab.id
+                    ? 'bg-[#8a37ff] text-white'
+                    : 'bg-[#f1f5f9] text-[#64748b] hover:bg-violet-50 hover:text-[#8a37ff]',
+                )}
+              >
+                {tab.label}
+              </button>
             ))}
-          </select>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="relative block w-full sm:w-52 lg:w-56">
+              <FiSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#64748b]" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search patient or reason"
+                className="h-8 w-full rounded-[8px] border border-[#dfe3ea] bg-white pl-8 pr-2 text-sm outline-none focus:border-[#8a37ff]"
+              />
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as CalendarStatusFilter)
+              }
+              className="h-8 w-full shrink-0 rounded-[8px] border border-[#dfe3ea] bg-white px-2.5 text-xs font-semibold text-[#111827] outline-none focus:border-[#8a37ff] sm:w-36"
+              aria-label="Filter by status"
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#eef1f5] pt-2 text-[11px] text-[#64748b]">
+          <span className="font-semibold text-[#94a3b8]">Legend:</span>
           {(Object.keys(STATUS_META) as CalendarDisplayStatus[]).map((status) => (
-            <span
-              key={status}
-              className="inline-flex items-center gap-1.5 text-[#64748b]"
-            >
+            <span key={status} className="inline-flex items-center gap-1.5">
               <span
                 className={clsx(
                   'h-2 w-2 rounded-full',
@@ -985,20 +969,13 @@ export function CalendarPage() {
           ))}
         </div>
 
-        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs sm:hidden">
-          <span className="font-bold text-black">{navLabel}</span>
-          <span className="text-[#64748b]">
-            {formatDoctorLongDate(selectedDate, doctorTimezone)}
-          </span>
-        </div>
-
         {appointmentsQuery.isError ? (
-          <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">
+          <div className="mt-2 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
             Unable to load appointments. Refresh to try again.
           </div>
         ) : null}
         {appointmentsQuery.isLoading ? (
-          <div className="mt-2 text-xs text-[#64748b]">Loading…</div>
+          <div className="mt-2 text-xs text-[#64748b]">Loading appointments…</div>
         ) : null}
       </section>
 

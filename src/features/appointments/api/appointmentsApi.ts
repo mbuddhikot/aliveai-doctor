@@ -1,5 +1,6 @@
 import { apiClient, extractApiErrorMessage, getAxiosError } from '../../../lib/apiClient'
 import { doctorLocalWallClockToUtcIso } from '../../../lib/doctorTimezone'
+import { normalizeDoctorBookableSlots } from '../lib/doctorBookableSlots'
 import {
   normalizeAppointmentList,
   normalizeDoctorAppointment,
@@ -296,26 +297,7 @@ export async function rejectDoctorAppointment(params: {
   }
 }
 
-function normalizeDoctorBookableSlots(data: unknown): DoctorBookableSlot[] {
-  const list = Array.isArray(data)
-    ? data
-    : isRecord(data) && Array.isArray(data.data)
-      ? data.data
-      : isRecord(data) && Array.isArray(data.slots)
-        ? data.slots
-        : []
-
-  return list
-    .filter(isRecord)
-    .map((item) => ({
-      time: String(item.time ?? '').trim(),
-      period: String(item.period ?? '').trim(),
-      available: item.available === true,
-    }))
-    .filter((slot) => slot.time.length > 0 && slot.period.length > 0)
-}
-
-/** GET /v1/doctors/{doctor_id}/slots?date=YYYY-MM-DD */
+/** GET /v1/doctors/{doctor_id}/slots?date=YYYY-MM-DD — returns SlotItem[]. */
 export async function getDoctorBookableSlots(params: {
   doctorId: string
   date: string

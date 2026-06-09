@@ -153,11 +153,16 @@ function AppointmentListItem({
             {formatAppointmentDateTime(appointment.starts_at, doctorTimezone)}
           </p>
         </div>
-        {needsAction && (
-          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-            Action
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {shouldShowAppointmentStatusBadge(appointment) && (
+            <StatusBadge status={appointment.status} />
+          )}
+          {needsAction && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+              Action
+            </span>
+          )}
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <WorkflowBadge
@@ -165,9 +170,6 @@ function AppointmentListItem({
           doctorStatus={appointment.doctor_status}
           appointment={appointment}
         />
-        {shouldShowAppointmentStatusBadge(appointment) && (
-          <StatusBadge status={appointment.status} />
-        )}
         {fee && (
           <span className="text-xs font-semibold text-[#64748b]">{fee}</span>
         )}

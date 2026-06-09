@@ -1,5 +1,9 @@
 import { DEFAULT_PROFILE_TIMEZONE } from '../../doctor-onboarding/constants'
 import { apiClient, extractApiErrorMessage } from '../../../lib/apiClient'
+import {
+  defaultSelectedWeekStarts,
+  sortWeekStarts,
+} from '../lib/availabilityWeeks'
 import type {
   AvailabilitySlot,
   DoctorAvailability,
@@ -55,14 +59,100 @@ function createSlot(
   }
 }
 
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+function isDateKey(value: string): boolean {
+  return DATE_KEY_PATTERN.test(value)
+}
+
+function normalizeApiDateKey(value: unknown): string {
+  const raw = String(value ?? '').trim()
+  if (isDateKey(raw)) return raw
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/)
+  return match ? match[1] : ''
+}
+
+function parseAvailableWeekStartsFromApi(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+
+  const weekStarts = value
+    .filter(isRecord)
+    .map((week) => normalizeApiDateKey(week.week_start))
+    .filter(isDateKey)
+
+  return sortWeekStarts(weekStarts)
+}
+
+/** Prefer API weeks when present; otherwise keep what the doctor already selected. */
+function resolveSelectedWeekStartsAfterSave(
+  response: DoctorAvailabilityResponse,
+  savedAvailability: DoctorAvailability,
+  submittedAvailability: DoctorAvailability,
+): string[] {
+  const fromResponse = parseAvailableWeekStartsFromApi(
+    response.available_weeks,
+  )
+  if (fromResponse !== undefined && fromResponse.length > 0) {
+    return fromResponse
+  }
+
+  const submitted = sortWeekStarts(submittedAvailability.selectedWeekStarts)
+  if (submitted.length > 0) {
+    return submitted
+  }
+
+  if (fromResponse !== undefined) {
+    return fromResponse
+  }
+
+  return savedAvailability.selectedWeekStarts
+}
+
+function resolveSelectedWeekStarts(
+  value: unknown,
+  doctorTimezone: string,
+  options?: { useDefaultWhenEmpty?: boolean },
+): string[] {
+  const parsed = parseAvailableWeekStartsFromApi(value)
+  if (parsed !== undefined) {
+    if (parsed.length > 0 || !options?.useDefaultWhenEmpty) {
+      return parsed
+    }
+  }
+
+  if (Array.isArray(value)) {
+    const weekStarts = value.filter(
+      (item): item is string => typeof item === 'string' && isDateKey(item),
+    )
+    if (weekStarts.length > 0) {
+      return sortWeekStarts(weekStarts)
+    }
+    if (!options?.useDefaultWhenEmpty) {
+      return []
+    }
+  }
+
+  return defaultSelectedWeekStarts(doctorTimezone)
+}
+
+function selectedWeekStartsToApiRequest(
+  selectedWeekStarts: string[],
+): DoctorAvailabilitySetRequest['available_weeks'] {
+  return sortWeekStarts(selectedWeekStarts).map((week_start) => ({
+    week_start,
+  }))
+}
+
 export function createDefaultAvailability(
   doctorTimezone?: string,
 ): DoctorAvailability {
+  const timezone = doctorTimezone?.trim() || DEFAULT_PROFILE_TIMEZONE
   return {
-    timezone: doctorTimezone?.trim() || DEFAULT_PROFILE_TIMEZONE,
+    timezone,
     slotDurationMinutes: 30,
     bufferMinutes: 10,
     bookingWindowDays: 30,
+    selectedWeekStarts: defaultSelectedWeekStarts(timezone),
     weekly: WEEKDAYS.map((day, index) => ({
       ...day,
       enabled: index < 5,
@@ -147,6 +237,13 @@ function parseApiResponse(payload: unknown): DoctorAvailabilityResponse {
       }))
     : []
 
+  const availableWeeks = Array.isArray(root.available_weeks)
+    ? root.available_weeks.filter(isRecord).map((week) => ({
+        week_start: String(week.week_start || '').trim(),
+        week_end: String(week.week_end || '').trim(),
+      }))
+    : undefined
+
   return {
     doctor_id: String(root.doctor_id || ''),
     slot_duration_minutes:
@@ -158,6 +255,7 @@ function parseApiResponse(payload: unknown): DoctorAvailabilityResponse {
         ? Number(root.buffer_between_visits_minutes)
         : undefined,
     slots,
+    available_weeks: availableWeeks,
   }
 }
 
@@ -193,6 +291,9 @@ export function availabilityToApiRequest(
       10,
     ),
     slots,
+    available_weeks: selectedWeekStartsToApiRequest(
+      availability.selectedWeekStarts,
+    ),
   }
 }
 
@@ -245,6 +346,7 @@ export async function setDoctorAvailability(
           end_time: normalizeTime(slot.end_time),
           is_available: slot.is_available !== false,
         })),
+        available_weeks: body.available_weeks ?? [],
       },
       params ? { params } : undefined,
     )
@@ -276,6 +378,10 @@ export function availabilityFromApiResponse(
     byWeekday.set(slot.weekday, list)
   })
 
+  const apiWeekStarts = parseAvailableWeekStartsFromApi(
+    response.available_weeks,
+  )
+
   return {
     ...fallback,
     slotDurationMinutes: coerceSlotDurationMinutes(
@@ -286,6 +392,10 @@ export function availabilityFromApiResponse(
       response.buffer_between_visits_minutes,
       fallback.bufferMinutes,
     ),
+    selectedWeekStarts:
+      apiWeekStarts !== undefined
+        ? apiWeekStarts
+        : fallback.selectedWeekStarts,
     weekly: fallback.weekly.map((day) => {
       const weekday = ID_TO_WEEKDAY[day.id]
       const daySlots = byWeekday.get(weekday) ?? []
@@ -306,7 +416,15 @@ export function readAvailabilityDraft(): DoctorAvailability | null {
   try {
     const parsed = JSON.parse(raw) as DoctorAvailability
     if (!Array.isArray(parsed.weekly)) return null
-    return parsed
+    const timezone = parsed.timezone?.trim() || DEFAULT_PROFILE_TIMEZONE
+    return {
+      ...parsed,
+      selectedWeekStarts: resolveSelectedWeekStarts(
+        parsed.selectedWeekStarts,
+        timezone,
+        { useDefaultWhenEmpty: true },
+      ),
+    }
   } catch {
     return null
   }
@@ -387,12 +505,24 @@ export async function getDoctorAvailability(
       }
     }
 
+    const timezone =
+      profileTimezone?.trim() ||
+      availability.timezone ||
+      DEFAULT_PROFILE_TIMEZONE
+    const fromApi = parseAvailableWeekStartsFromApi(
+      availabilityResult.value.available_weeks,
+    )
+    const draft = readAvailabilityDraft()
+
     const withProfileTimezone: DoctorAvailability = {
       ...availability,
-      timezone:
-        profileTimezone?.trim() ||
-        availability.timezone ||
-        DEFAULT_PROFILE_TIMEZONE,
+      timezone,
+      selectedWeekStarts:
+        fromApi !== undefined
+          ? fromApi
+          : draft?.selectedWeekStarts?.length
+            ? sortWeekStarts(draft.selectedWeekStarts)
+            : availability.selectedWeekStarts,
     }
     writeAvailabilityDraft(withProfileTimezone)
     return withProfileTimezone
@@ -431,6 +561,11 @@ export async function saveDoctorAvailability(
       slotDurationMinutes: bookingRules.slot_duration_minutes,
       bufferMinutes: bookingRules.buffer_between_visits_minutes,
       bookingWindowDays: availability.bookingWindowDays,
+      selectedWeekStarts: resolveSelectedWeekStartsAfterSave(
+        response,
+        saved,
+        availability,
+      ),
       exceptions: availability.exceptions,
     }
     writeAvailabilityDraft(withProfileTimezone)

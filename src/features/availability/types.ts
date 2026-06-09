@@ -30,12 +30,30 @@ export type AvailabilityException = {
   unavailable: boolean
 }
 
+export type AvailabilityWeekOption = {
+  weekStart: string
+  label: string
+}
+
+/** GET /v1/doctors/{doctor_id}/availability — one bookable calendar week. */
+export type ApiAvailableWeek = {
+  week_start: string
+  week_end: string
+}
+
+/** POST /v1/doctor/availability — Monday yyyy-MM-dd for each selected week. */
+export type ApiAvailableWeekInput = {
+  week_start: string
+}
+
 /** UI model — weekly slots via availability API; slot/buffer via booking-rules API. */
 export type DoctorAvailability = {
   timezone: string
   slotDurationMinutes: number
   bufferMinutes: number
   bookingWindowDays: number
+  /** Monday date keys (yyyy-MM-dd) synced via availability API `available_weeks`. */
+  selectedWeekStarts: string[]
   weekly: DayAvailability[]
   exceptions: AvailabilityException[]
   updatedAt?: string
@@ -54,6 +72,7 @@ export type DoctorAvailabilityResponse = {
   slot_duration_minutes?: number
   buffer_between_visits_minutes?: number
   slots: ApiAvailabilitySlot[]
+  available_weeks?: ApiAvailableWeek[]
 }
 
 /**
@@ -70,6 +89,8 @@ export type DoctorAvailabilitySetRequest = {
     end_time: string
     is_available?: boolean
   }>
+  /** Empty list = no week filter (any future day matching weekday slots). */
+  available_weeks?: ApiAvailableWeekInput[]
 }
 
 /** GET/PUT /v1/doctor/booking-rules */

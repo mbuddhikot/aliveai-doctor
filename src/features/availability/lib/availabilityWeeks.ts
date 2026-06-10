@@ -27,6 +27,15 @@ export function mondayOfWeek(dateKey: string, doctorTimezone: string): string {
   return dt.minus({ days: dt.weekday - 1 }).toFormat('yyyy-MM-dd')
 }
 
+/** API `available_weeks[].week_start` must be a Monday (YYYY-MM-DD). */
+export function isMondayWeekStart(
+  weekStartKey: string,
+  doctorTimezone: string,
+): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStartKey)) return false
+  return doctorDateTimeFromKey(weekStartKey, doctorTimezone).weekday === 1
+}
+
 export function weekDayKeysFromMonday(
   weekStartKey: string,
   doctorTimezone: string,

@@ -16,6 +16,7 @@ import {
 } from 'react-icons/fi'
 import {
   DOCTOR_APPOINTMENTS_QUERY_KEY,
+  DOCTOR_SLOTS_QUERY_KEY,
   listDoctorAppointments,
 } from '../../../features/appointments/api/appointmentsApi'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
@@ -28,6 +29,7 @@ import {
   getDoctorAvailability,
   readAvailabilityDraft,
   saveDoctorAvailability,
+  validateAvailabilityWeekStarts,
   writeAvailabilityDraft,
 } from '../../../features/availability/api/availabilityApi'
 import { AvailabilityWeekPreview } from '../../../features/availability/components/AvailabilityWeekPreview'
@@ -156,6 +158,13 @@ function validateAvailability(availability: DoctorAvailability): string[] {
   if (!availability.weekly.some((day) => day.enabled && day.slots.length > 0)) {
     messages.push('Add at least one available slot.')
   }
+
+  messages.push(
+    ...validateAvailabilityWeekStarts(
+      availability.selectedWeekStarts,
+      availability.timezone,
+    ),
+  )
 
   return messages
 }
@@ -543,6 +552,9 @@ export function AvailabilityPage() {
         [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId, profileTimezone],
         saved,
       )
+      void queryClient.invalidateQueries({
+        queryKey: [DOCTOR_SLOTS_QUERY_KEY, doctorId],
+      })
       const message =
         'Availability and booking rules saved successfully. Patients can book these times.'
       setSaveMessage(message)

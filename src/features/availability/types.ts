@@ -46,7 +46,7 @@ export type ApiAvailableWeekInput = {
   week_start: string
 }
 
-/** UI model — weekly slots via availability API; slot/buffer via booking-rules API. */
+/** UI model — loaded from GET /v1/doctors/{doctor_id}/availability. */
 export type DoctorAvailability = {
   timezone: string
   slotDurationMinutes: number
@@ -67,21 +67,27 @@ export type ApiAvailabilitySlot = {
   is_available: boolean
 }
 
+/**
+ * GET /v1/doctors/{doctor_id}/availability and POST /v1/doctor/availability response.
+ * @see https://aliveai-backend-api-927940582634.us-central1.run.app/docs#/appointments/get_doctor_availability_v1_doctors__doctor_id__availability_get
+ */
 export type DoctorAvailabilityResponse = {
   doctor_id: string
-  slot_duration_minutes?: number
-  buffer_between_visits_minutes?: number
+  slot_duration_minutes: number
+  buffer_between_visits_minutes: number
   slots: ApiAvailabilitySlot[]
-  available_weeks?: ApiAvailableWeek[]
+  /** Mon–Sun bookable weeks; empty = no week filter. */
+  available_weeks: ApiAvailableWeek[]
 }
 
 /**
- * POST /v1/doctor/availability — replaces the doctor's weekly schedule.
+ * POST /v1/doctor/availability — replaces weekly slots, booking rules, and available weeks.
  * @see https://aliveai-backend-api-927940582634.us-central1.run.app/docs#/appointments/set_doctor_availability_v1_doctor_availability_post
  */
 export type DoctorAvailabilitySetRequest = {
-  /** Optional on API; slot/buffer are also saved via PUT /v1/doctor/booking-rules. */
+  /** Stored as doctors.session_minutes (15 | 20 | 30 | 45 | 60). */
   slot_duration_minutes?: number
+  /** Stored as doctors.visit_buffer_minutes (0 | 5 | 10 | 15 | 20). */
   buffer_between_visits_minutes?: number
   slots: Array<{
     weekday: number

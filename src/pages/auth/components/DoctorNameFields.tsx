@@ -36,7 +36,10 @@ export function DoctorNameFields({ register, errors }: DoctorNameFieldsProps) {
               type="text"
               autoComplete="given-name"
               placeholder="First name"
+              maxLength={60}
+              required
               aria-invalid={Boolean(firstError)}
+              aria-describedby={firstError ? 'sign-up-first-name-error' : undefined}
               className={clsx(
                 inputBase,
                 firstError
@@ -46,7 +49,11 @@ export function DoctorNameFields({ register, errors }: DoctorNameFieldsProps) {
               {...register('first_name')}
             />
             {firstError && (
-              <p role="alert" className="text-xs text-red-600">
+              <p
+                id="sign-up-first-name-error"
+                role="alert"
+                className="text-xs text-red-600"
+              >
                 {firstError}
               </p>
             )}
@@ -60,7 +67,10 @@ export function DoctorNameFields({ register, errors }: DoctorNameFieldsProps) {
               type="text"
               autoComplete="family-name"
               placeholder="Last name"
+              maxLength={60}
+              required
               aria-invalid={Boolean(lastError)}
+              aria-describedby={lastError ? 'sign-up-last-name-error' : undefined}
               className={clsx(
                 inputBase,
                 lastError
@@ -70,7 +80,11 @@ export function DoctorNameFields({ register, errors }: DoctorNameFieldsProps) {
               {...register('last_name')}
             />
             {lastError && (
-              <p role="alert" className="text-xs text-red-600">
+              <p
+                id="sign-up-last-name-error"
+                role="alert"
+                className="text-xs text-red-600"
+              >
                 {lastError}
               </p>
             )}

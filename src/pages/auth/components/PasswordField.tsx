@@ -10,6 +10,8 @@ type PasswordFieldProps = {
   hint?: string
   autoComplete: 'current-password' | 'new-password'
   registration: UseFormRegisterReturn
+  maxLength?: number
+  required?: boolean
 }
 
 export function PasswordField({
@@ -19,6 +21,8 @@ export function PasswordField({
   hint,
   autoComplete,
   registration,
+  maxLength,
+  required,
 }: PasswordFieldProps) {
   const [showPassword, setShowPassword] = useState(false)
   const errorId = error ? `${id}-error` : undefined
@@ -45,6 +49,8 @@ export function PasswordField({
           aria-invalid={Boolean(error)}
           aria-describedby={describedBy}
           placeholder="••••••••"
+          maxLength={maxLength}
+          required={required}
           className="h-full w-full bg-transparent text-base text-black outline-none placeholder:text-[#9aa1ad]"
           {...registration}
         />

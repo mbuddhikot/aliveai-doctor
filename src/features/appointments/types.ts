@@ -58,7 +58,10 @@ export type RescheduleAppointmentPayload = {
   duration_minutes?: number | null
 }
 
-/** From GET /v1/doctors/{doctor_id}/slots?date=YYYY-MM-DD */
+/**
+ * From GET /v1/doctors/{doctor_id}/slots?date=YYYY-MM-DD
+ * @see https://aliveai-backend-api-927940582634.us-central1.run.app/docs#/appointments/get_doctor_slots_v1_doctors__doctor_id__slots_get
+ */
 export type DoctorBookableSlotPeriod = 'Morning' | 'Afternoon' | 'Evening'
 
 export type DoctorBookableSlot = {

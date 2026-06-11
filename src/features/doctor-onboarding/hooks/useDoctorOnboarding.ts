@@ -14,6 +14,7 @@ import type { OnboardingStep } from '../constants'
 import { profileExists } from '../lib/profileMappers'
 import type { DoctorDocumentType, DoctorProfileCreatePayload } from '../types'
 import { isDoctorOnboardingComplete } from '../utils/access'
+import { toastError, toastSuccess } from '../../../lib/toast'
 
 export const DOCTOR_PROFILE_QUERY_KEY = ['doctor-profile'] as const
 export const DOCTOR_VERIFICATION_QUERY_KEY = ['doctor-verification-status'] as const
@@ -122,6 +123,10 @@ export function useDoctorOnboarding() {
       queryClient.setQueryData(DOCTOR_PROFILE_QUERY_KEY, profile)
       await invalidateOnboardingQueries()
       setActiveStep('documents')
+      toastSuccess('Profile saved')
+    },
+    onError: (err) => {
+      toastError(err, 'Unable to save profile')
     },
   })
 
@@ -151,6 +156,10 @@ export function useDoctorOnboarding() {
     mutationFn: deleteDoctorDocument,
     onSuccess: async () => {
       await invalidateOnboardingQueries()
+      toastSuccess('Document removed')
+    },
+    onError: (err) => {
+      toastError(err, 'Unable to remove document')
     },
   })
 
@@ -163,26 +172,34 @@ export function useDoctorOnboarding() {
         docType: DoctorDocumentType,
       ) => void,
     ) => {
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index]
-        onProgress?.(index + 1, items.length, item.doc_type)
-        const existing = [...documents]
-          .filter((doc) => doc.doc_type === item.doc_type)
-          .sort(
-            (a, b) =>
-              new Date(b.uploaded_at).getTime() -
-              new Date(a.uploaded_at).getTime(),
-          )[0]
+      try {
+        for (let index = 0; index < items.length; index += 1) {
+          const item = items[index]
+          onProgress?.(index + 1, items.length, item.doc_type)
+          const existing = [...documents]
+            .filter((doc) => doc.doc_type === item.doc_type)
+            .sort(
+              (a, b) =>
+                new Date(b.uploaded_at).getTime() -
+                new Date(a.uploaded_at).getTime(),
+            )[0]
 
-        if (existing) {
-          await updateDocumentMutation.mutateAsync({
-            documentId: existing.id,
-            file: item.file,
-            doc_type: item.doc_type,
-          })
-        } else {
-          await uploadDocumentMutation.mutateAsync(item)
+          if (existing) {
+            await updateDocumentMutation.mutateAsync({
+              documentId: existing.id,
+              file: item.file,
+              doc_type: item.doc_type,
+            })
+          } else {
+            await uploadDocumentMutation.mutateAsync(item)
+          }
         }
+        toastSuccess(
+          items.length === 1 ? 'Document uploaded' : 'Documents uploaded',
+        )
+      } catch (err) {
+        toastError(err, 'Unable to upload documents')
+        throw err
       }
     },
     [documents, updateDocumentMutation, uploadDocumentMutation],

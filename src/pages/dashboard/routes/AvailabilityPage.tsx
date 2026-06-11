@@ -12,17 +12,34 @@ import {
   FiRefreshCw,
   FiSave,
   FiTrash2,
+  FiUsers,
 } from 'react-icons/fi'
+import {
+  DOCTOR_APPOINTMENTS_QUERY_KEY,
+  DOCTOR_SLOTS_QUERY_KEY,
+  listDoctorAppointments,
+} from '../../../features/appointments/api/appointmentsApi'
 import { useDoctorId } from '../../../features/appointments/hooks/useDoctorId'
 import { useDoctorTimezone } from '../../../features/appointments/hooks/useDoctorTimezone'
 import { formatDoctorTimezoneLabel } from '../../../lib/doctorTimezone'
+import { toastError, toastSuccess } from '../../../lib/toast'
 import {
   createDefaultAvailability,
   DOCTOR_AVAILABILITY_QUERY_KEY,
   getDoctorAvailability,
   readAvailabilityDraft,
   saveDoctorAvailability,
+  validateAvailabilityWeekStarts,
+  writeAvailabilityDraft,
 } from '../../../features/availability/api/availabilityApi'
+import { AvailabilityWeekPreview } from '../../../features/availability/components/AvailabilityWeekPreview'
+import { BookingWeekPicker } from '../../../features/availability/components/BookingWeekPicker'
+import {
+  countAppointmentsInSelectedWeeks,
+  countBookableBlocksInSelectedWeeks,
+  defaultSelectedWeekStarts,
+  sortWeekStarts,
+} from '../../../features/availability/lib/availabilityWeeks'
 import type {
   AvailabilitySlot,
   ConsultationMode,
@@ -141,6 +158,13 @@ function validateAvailability(availability: DoctorAvailability): string[] {
   if (!availability.weekly.some((day) => day.enabled && day.slots.length > 0)) {
     messages.push('Add at least one available slot.')
   }
+
+  messages.push(
+    ...validateAvailabilityWeekStarts(
+      availability.selectedWeekStarts,
+      availability.timezone,
+    ),
+  )
 
   return messages
 }
@@ -413,51 +437,6 @@ function DayEditor({
   )
 }
 
-function SummaryList({ availability }: { availability: DoctorAvailability }) {
-  const activeDays = availability.weekly.filter((day) => day.enabled)
-
-  return (
-    <div className="space-y-3">
-      {activeDays.length > 0 ? (
-        activeDays.map((day) => (
-          <div
-            key={day.id}
-            className="rounded-md border border-[#edf0f4] bg-[#fbfcfe] px-4 py-3"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-bold text-[#111827]">{day.label}</span>
-              <span className="text-xs font-bold text-[#8a37ff]">
-                {day.slots.length} slots
-              </span>
-            </div>
-            <div className="mt-2 space-y-1">
-              {day.slots.map((slot) => (
-                <div
-                  key={slot.id}
-                  className="flex items-center justify-between gap-3 text-sm"
-                >
-                  <span className="text-[#253047]">
-                    {formatTime(slot.start)} - {formatTime(slot.end)}
-                  </span>
-                  <span className="text-[#64748b]">
-                    {normalizeSlotModes(slot.modes)
-                      .map((mode) => MODE_LABELS[mode])
-                      .join(', ')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="rounded-md border border-dashed border-[#cfd6e1] p-4 text-sm text-[#64748b]">
-          Your weekly availability is empty.
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function AvailabilityPage() {
   const queryClient = useQueryClient()
   const { doctorId, isLoading: doctorIdLoading, isError: doctorIdError } =
@@ -475,6 +454,13 @@ export function AvailabilityPage() {
     retry: false,
   })
 
+  const appointmentsQuery = useQuery({
+    queryKey: [DOCTOR_APPOINTMENTS_QUERY_KEY, doctorId],
+    queryFn: () => listDoctorAppointments({ doctorId: doctorId! }),
+    enabled: Boolean(doctorId),
+    retry: false,
+  })
+
   const saveMutation = useMutation({
     mutationFn: (payload: DoctorAvailability) =>
       saveDoctorAvailability(doctorId ?? undefined, payload),
@@ -486,10 +472,17 @@ export function AvailabilityPage() {
     draft ||
     createDefaultAvailability(profileTimezone)
 
-  const availability = useMemo(
-    () => ({
+  const availability = useMemo(() => {
+    const selectedWeekStarts = Array.isArray(
+      availabilitySource.selectedWeekStarts,
+    )
+      ? sortWeekStarts(availabilitySource.selectedWeekStarts)
+      : defaultSelectedWeekStarts(profileTimezone)
+
+    return {
       ...availabilitySource,
       timezone: profileTimezone,
+      selectedWeekStarts,
       weekly: availabilitySource.weekly.map((day) => ({
         ...day,
         slots: day.slots.map((slot) => ({
@@ -497,9 +490,8 @@ export function AvailabilityPage() {
           modes: normalizeSlotModes(slot.modes),
         })),
       })),
-    }),
-    [availabilitySource, profileTimezone],
-  )
+    }
+  }, [availabilitySource, profileTimezone])
 
   const validationMessages = useMemo(
     () => validateAvailability(availability),
@@ -518,9 +510,21 @@ export function AvailabilityPage() {
   const activeDays = availability.weekly.filter((day) => day.enabled).length
   const weeklyHours = countWeeklyHours(availability)
   const weeklySlots = countSlots(availability)
+  const appointments = appointmentsQuery.data?.data ?? []
+  const selectedWeekCount = availability.selectedWeekStarts.length
+  const selectedWeekBlocks = countBookableBlocksInSelectedWeeks(
+    availability,
+    profileTimezone,
+  )
+  const selectedWeekAppointments = countAppointmentsInSelectedWeeks(
+    appointments,
+    availability.selectedWeekStarts,
+    profileTimezone,
+  )
 
   const updateAvailability = (next: DoctorAvailability) => {
     setLocalAvailability(next)
+    writeAvailabilityDraft(next)
     setSaveMessage(null)
   }
 
@@ -535,23 +539,31 @@ export function AvailabilityPage() {
 
   const saveAvailability = async () => {
     if (hasValidationErrors) {
-      setSaveMessage('Fix the highlighted availability issues before saving.')
+      const message = 'Fix the highlighted availability issues before saving.'
+      setSaveMessage(message)
+      toastError(new Error(message), message)
       return
     }
 
     try {
       const saved = await saveMutation.mutateAsync(availability)
       setLocalAvailability(saved)
-      void queryClient.invalidateQueries({
-        queryKey: [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId],
-      })
-      setSaveMessage(
-        'Availability and booking rules saved successfully. Patients can book these times.',
+      queryClient.setQueryData(
+        [DOCTOR_AVAILABILITY_QUERY_KEY, doctorId, profileTimezone],
+        saved,
       )
+      void queryClient.invalidateQueries({
+        queryKey: [DOCTOR_SLOTS_QUERY_KEY, doctorId],
+      })
+      const message =
+        'Availability and booking rules saved successfully. Patients can book these times.'
+      setSaveMessage(message)
+      toastSuccess('Availability saved')
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Unable to save availability.'
       setSaveMessage(message)
+      toastError(err, 'Unable to save availability')
     }
   }
 
@@ -597,8 +609,8 @@ export function AvailabilityPage() {
               </h1>
             </div>
             <p className="mt-1 text-xs leading-snug text-[#64748b] sm:max-w-xl">
-              Set weekly hours and booking rules, then click Save to sync with the
-              server. Patients can book your saved slots.
+              Set weekly hours, choose open calendar weeks, and click Save to sync
+              slots and booking rules with the server.
             </p>
           </div>
 
@@ -660,7 +672,7 @@ export function AvailabilityPage() {
         )}
       </section>
 
-      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
         <StatCard
           label="Active days"
           value={`${activeDays}/7`}
@@ -670,8 +682,18 @@ export function AvailabilityPage() {
         <StatCard
           label="Weekly hours"
           value={`${weeklyHours}h`}
-          hint={`${weeklySlots} blocks`}
+          hint={`${weeklySlots} blocks per week`}
           icon={<FiClock className="h-4 w-4" />}
+        />
+        <StatCard
+          label="Selected weeks"
+          value={String(selectedWeekCount)}
+          hint={
+            appointmentsQuery.isLoading
+              ? `${selectedWeekBlocks} blocks · loading appointments…`
+              : `${selectedWeekAppointments} appointments · ${selectedWeekBlocks} blocks`
+          }
+          icon={<FiUsers className="h-4 w-4" />}
         />
       </div>
 
@@ -704,7 +726,7 @@ export function AvailabilityPage() {
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-0.5">
             <Panel
               title="Booking rules"
-              subtitle="Slot length and buffer are saved to your doctor profile when you click Save."
+              subtitle="Slot length, buffer, and available weeks are saved when you click Save."
             >
               <div className="space-y-3">
                 <div className="rounded-md border border-[#dfe3ea] bg-[#f8fafc] px-3 py-2">
@@ -742,14 +764,32 @@ export function AvailabilityPage() {
                     updateAvailability({ ...availability, bufferMinutes })
                   }
                 />
+                <div className="border-t border-[#edf0f4] pt-3">
+                  <BookingWeekPicker
+                    doctorTimezone={profileTimezone}
+                    selectedWeekStarts={availability.selectedWeekStarts}
+                    onChange={(selectedWeekStarts) =>
+                      updateAvailability({
+                        ...availability,
+                        selectedWeekStarts,
+                      })
+                    }
+                  />
+                </div>
               </div>
             </Panel>
 
             <Panel
               title="Live preview"
-              subtitle="What patients will see once this is published."
+              subtitle="Calendar dates for your selected weeks, one week at a time."
             >
-              <SummaryList availability={availability} />
+              <AvailabilityWeekPreview
+                doctorId={doctorId}
+                availability={availability}
+                doctorTimezone={profileTimezone}
+                appointments={appointments}
+                appointmentsLoading={appointmentsQuery.isLoading}
+              />
             </Panel>
           </div>
         </aside>

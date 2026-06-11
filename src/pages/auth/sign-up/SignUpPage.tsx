@@ -47,13 +47,15 @@ export function SignUpPage() {
     setError,
   } = useForm<SignUpFormValues>({
     resolver: zodResolver(signUpSchema),
+    mode: 'onTouched',
+    reValidateMode: 'onChange',
     defaultValues: {
       first_name: '',
       last_name: '',
       email: '',
       mobile_number: '',
       password: '',
-      accept_terms: undefined,
+      accept_terms: false,
     },
   })
 
@@ -130,15 +132,24 @@ export function SignUpPage() {
           type="email"
           autoComplete="email"
           placeholder="you@example.com"
+          maxLength={254}
+          required
           error={errors.email?.message}
           {...register('email')}
         />
 
         <PhoneNumberField
+          id="sign-up-mobile"
           country={country}
           onCountryChange={setCountry}
           error={errors.mobile_number?.message}
-          inputProps={register('mobile_number')}
+          inputProps={{
+            ...register('mobile_number'),
+            maxLength: 15,
+            required: true,
+            inputMode: 'numeric',
+            pattern: '[0-9]*',
+          }}
         />
 
         <PasswordField
@@ -146,6 +157,8 @@ export function SignUpPage() {
           label="Password"
           autoComplete="new-password"
           hint={PASSWORD_REQUIREMENTS_HINT}
+          maxLength={128}
+          required
           error={errors.password?.message}
           registration={register('password')}
         />
@@ -154,6 +167,10 @@ export function SignUpPage() {
           <label className="flex cursor-pointer items-start gap-3 text-sm text-black">
             <input
               type="checkbox"
+              aria-invalid={Boolean(errors.accept_terms)}
+              aria-describedby={
+                errors.accept_terms ? 'sign-up-accept-terms-error' : undefined
+              }
               className={clsx(
                 'mt-0.5 h-5 w-5 shrink-0 rounded border-[#e5e5e5] text-[#8a37ff] focus:ring-[#8a37ff]',
                 errors.accept_terms && 'border-red-300',
@@ -182,7 +199,11 @@ export function SignUpPage() {
             </span>
           </label>
           {errors.accept_terms && (
-            <p role="alert" className="text-xs text-red-600">
+            <p
+              id="sign-up-accept-terms-error"
+              role="alert"
+              className="text-xs text-red-600"
+            >
               {errors.accept_terms.message}
             </p>
           )}

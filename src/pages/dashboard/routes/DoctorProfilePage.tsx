@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -22,12 +22,11 @@ import { profileExists } from '../../../features/doctor-onboarding/lib/profileMa
 import type { profileFormToPayload } from '../../../features/doctor-onboarding/lib/profileSchema'
 import type { DoctorDocumentType } from '../../../features/doctor-onboarding/types'
 import { extractApiErrorMessage } from '../../../lib/apiClient'
+import { toastError, toastSuccess } from '../../../lib/toast'
 
 export function DoctorProfilePage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [saveSuccess, setSaveSuccess] = useState(false)
-
   const statusQuery = useQuery({
     queryKey: DOCTOR_VERIFICATION_QUERY_KEY,
     queryFn: getDoctorVerificationStatus,
@@ -62,8 +61,10 @@ export function DoctorProfilePage() {
     onSuccess: async (profile) => {
       queryClient.setQueryData(DOCTOR_PROFILE_QUERY_KEY, profile)
       await invalidateProfileData()
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 4000)
+      toastSuccess('Profile saved')
+    },
+    onError: (err) => {
+      toastError(err, 'Unable to save profile')
     },
   })
 
@@ -90,26 +91,34 @@ export function DoctorProfilePage() {
         docType: DoctorDocumentType,
       ) => void,
     ) => {
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index]
-        onProgress?.(index + 1, items.length, item.doc_type)
-        const existing = [...documents]
-          .filter((doc) => doc.doc_type === item.doc_type)
-          .sort(
-            (a, b) =>
-              new Date(b.uploaded_at).getTime() -
-              new Date(a.uploaded_at).getTime(),
-          )[0]
+      try {
+        for (let index = 0; index < items.length; index += 1) {
+          const item = items[index]
+          onProgress?.(index + 1, items.length, item.doc_type)
+          const existing = [...documents]
+            .filter((doc) => doc.doc_type === item.doc_type)
+            .sort(
+              (a, b) =>
+                new Date(b.uploaded_at).getTime() -
+                new Date(a.uploaded_at).getTime(),
+            )[0]
 
-        if (existing) {
-          await updateDocumentMutation.mutateAsync({
-            documentId: existing.id,
-            file: item.file,
-            doc_type: item.doc_type,
-          })
-        } else {
-          await uploadDocumentMutation.mutateAsync(item)
+          if (existing) {
+            await updateDocumentMutation.mutateAsync({
+              documentId: existing.id,
+              file: item.file,
+              doc_type: item.doc_type,
+            })
+          } else {
+            await uploadDocumentMutation.mutateAsync(item)
+          }
         }
+        toastSuccess(
+          items.length === 1 ? 'Document uploaded' : 'Documents uploaded',
+        )
+      } catch (err) {
+        toastError(err, 'Unable to upload documents')
+        throw err
       }
     },
     [documents, updateDocumentMutation, uploadDocumentMutation],
@@ -212,11 +221,6 @@ export function DoctorProfilePage() {
       </section>
 
       <section className="rounded-2xl border border-[#dfe3ea] bg-white p-6 shadow-[0_18px_32px_rgba(31,41,55,0.08)] sm:p-8">
-        {saveSuccess && (
-          <p className="mb-6 rounded-[10px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Profile saved successfully.
-          </p>
-        )}
         <ProfileStepForm
           variant="dashboard"
           user={user}
@@ -240,7 +244,15 @@ export function DoctorProfilePage() {
             updateDocumentMutation.error
           }
           onUploadBatch={uploadDocumentsBatch}
-          onUpdateDocument={(params) => updateDocumentMutation.mutateAsync(params)}
+          onUpdateDocument={async (params) => {
+            try {
+              await updateDocumentMutation.mutateAsync(params)
+              toastSuccess('Document updated')
+            } catch (err) {
+              toastError(err, 'Unable to update document')
+              throw err
+            }
+          }}
         />
       </section>
     </div>

@@ -6,14 +6,13 @@ import {
   DOCTOR_SLOTS_QUERY_KEY,
   getDoctorBookableSlots,
 } from '../api/appointmentsApi'
+import { groupAvailableDoctorBookableSlots } from '../lib/doctorBookableSlots'
 import {
   appointmentDoctorTimezone,
   isoToDateInput,
 } from '../lib/format'
 import type { DoctorAppointment, DoctorBookableSlot } from '../types'
 import { AppointmentModal } from './AppointmentModal'
-
-const SLOT_PERIOD_ORDER = ['Morning', 'Afternoon', 'Evening'] as const
 
 type RescheduleAppointmentModalProps = {
   appointment: DoctorAppointment
@@ -31,37 +30,6 @@ type RescheduleAppointmentModalProps = {
 
 function slotSelectionKey(slot: DoctorBookableSlot): string {
   return `${slot.period}:${slot.time}`
-}
-
-function groupAvailableSlots(slots: DoctorBookableSlot[]): Array<{
-  period: string
-  slots: DoctorBookableSlot[]
-}> {
-  const byPeriod = new Map<string, DoctorBookableSlot[]>()
-
-  for (const slot of slots) {
-    if (!slot.available) continue
-    const list = byPeriod.get(slot.period) ?? []
-    list.push(slot)
-    byPeriod.set(slot.period, list)
-  }
-
-  for (const list of byPeriod.values()) {
-    list.sort((a, b) => a.time.localeCompare(b.time))
-  }
-
-  const orderedPeriods = [
-    ...SLOT_PERIOD_ORDER.filter((period) => byPeriod.has(period)),
-    ...[...byPeriod.keys()].filter(
-      (period) =>
-        !SLOT_PERIOD_ORDER.includes(period as (typeof SLOT_PERIOD_ORDER)[number]),
-    ),
-  ]
-
-  return orderedPeriods.map((period) => ({
-    period,
-    slots: byPeriod.get(period) ?? [],
-  }))
 }
 
 export function RescheduleAppointmentModal({
@@ -88,7 +56,7 @@ export function RescheduleAppointmentModal({
   })
 
   const groupedSlots = useMemo(
-    () => groupAvailableSlots(slotsQuery.data ?? []),
+    () => groupAvailableDoctorBookableSlots(slotsQuery.data ?? []),
     [slotsQuery.data],
   )
 

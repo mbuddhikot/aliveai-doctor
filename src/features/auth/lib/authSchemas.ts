@@ -42,13 +42,13 @@ export const mobileNumberField = z
   .string()
   .trim()
   .min(1, 'Phone number is required')
-  .transform((value) => value.replace(/\s+/g, ''))
+  .transform((value) => value.replace(/\D/g, ''))
   .pipe(
     z
       .string()
-      .min(7, 'Enter a valid phone number')
-      .max(15, 'Enter a valid phone number')
-      .regex(/^\d+$/, 'Phone number can only contain digits'),
+      .min(1, 'Phone number is required')
+      .min(7, 'Enter at least 7 digits')
+      .max(15, 'Phone number cannot exceed 15 digits'),
   )
 
 export const signInSchema = z.object({
@@ -63,8 +63,8 @@ export const signUpSchema = z.object({
   email: emailField,
   mobile_number: mobileNumberField,
   password: strongPasswordField,
-  accept_terms: z.literal(true, {
-    error: 'You must accept the terms to create an account',
+  accept_terms: z.boolean().refine((value) => value === true, {
+    message: 'You must accept the terms to create an account',
   }),
 })
 

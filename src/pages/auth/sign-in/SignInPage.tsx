@@ -47,6 +47,8 @@ export function SignInPage() {
     setError,
   } = useForm<SignInFormValues>({
     resolver: zodResolver(signInSchema),
+    mode: 'onTouched',
+    reValidateMode: 'onChange',
     defaultValues: {
       email: '',
       password: '',
@@ -115,6 +117,8 @@ export function SignInPage() {
           type="email"
           autoComplete="email"
           placeholder="you@example.com"
+          maxLength={254}
+          required
           error={errors.email?.message}
           {...register('email')}
         />
@@ -123,6 +127,8 @@ export function SignInPage() {
           id="sign-in-password"
           label="Password"
           autoComplete="current-password"
+          maxLength={128}
+          required
           error={errors.password?.message}
           registration={register('password')}
         />
